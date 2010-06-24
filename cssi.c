@@ -63,7 +63,8 @@ typedef struct
 selector;
 
 // function protos
-char * getl(FILE *); // gets a line of string data; returns a malloc-like pointer
+char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
+char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
 selector * mergesort(selector * array, int len);
 
 int main(int argc, char *argv[])
@@ -91,7 +92,7 @@ int main(int argc, char *argv[])
 		{
 			daemon=true;
 			fprintf(stderr, "cssi: Daemon mode is active.\n");
-			printf("CSSI:%s\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
+			printf("CSSI:\"%s\"\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
 		}
 		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
 		{
@@ -146,7 +147,7 @@ int main(int argc, char *argv[])
 	{
 		fprintf(stderr, "cssi: Error: No file given on command line!\n"USAGE_STRING"\n");
 		if(daemon)
-			printf("ERR:ENOFILE:No file given on command line!\n");
+			printf("ERR:ENOFILE\n");
 		return(1);
 	}
 	int i;
@@ -166,7 +167,7 @@ int main(int argc, char *argv[])
 				{
 					fprintf(stderr, "cssi: warning: Duplicate file in set%s: %s\n", i<initnfiles?"":" (from @import)", filename[i]);
 					if(daemon)
-						printf("WARN:WDUPFILE:%d:%s\n", i<initnfiles?0:1, filename[i]);
+						printf("WARN:WDUPFILE:%d:\"%s\"\n", i<initnfiles?0:1, filename[i]);
 				}
 				goto skip; // there is *nothing* *wrong* with the occasional goto
 			}
@@ -179,7 +180,7 @@ int main(int argc, char *argv[])
 		{
 			fprintf(stderr, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
 			if(daemon)
-				printf("ERR:ECANTREAD:Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
+				printf("ERR:ECANTREAD:\"%s\"\n", i==nfiles?"<stdin>":filename[i]);
 			return(1);
 		}
 		char ** mfile=NULL;
@@ -188,7 +189,7 @@ int main(int argc, char *argv[])
 		{
 			nlines++;
 			mfile=(char **)realloc(mfile, nlines*sizeof(char *));
-			mfile[nlines-1]=getl(fp);
+			mfile[nlines-1]=fgetl(fp);
 		}
 		fclose(fp);
 		while(mfile[nlines-1][0]==0)
@@ -198,7 +199,7 @@ int main(int argc, char *argv[])
 		
 		fprintf(stderr, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
-			printf("PROC:%s\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
+			printf("PROC:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 	
 		// Parse it with a state machine
 		int state=0;
@@ -432,7 +433,7 @@ int main(int argc, char *argv[])
 		free(mfile);
 		fprintf(stderr, "cssi: parsed %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
-			printf("PARSED:%s\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
+			printf("PARSED:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 		skip:;
 	}
 	fprintf(stderr, "cssi: Parsing completed\n");
@@ -465,18 +466,60 @@ int main(int argc, char *argv[])
 		}
 	}
 	selector * sort=mergesort(sels, nsels);
-	for(i=0;i<nsels;i++)
+	
+	int errupt=0;
+	while(!errupt)
 	{
-		int ent=sort[i].ent;
-		int file=entries[ent].file;
-		fprintf(stderr, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+		char * input=getl("cssi>");
+		char * cmd=strtok(input, " ");
+		int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
+		char ** parmv=NULL;
+		char *p;
+		while((p=strtok(NULL, " ")))
+		{
+			parmc++;
+			parmv=(char **)realloc(parmv, parmc*sizeof(char *));
+			parmv[parmc-1]=p;
+		}
+		if(strncmp(cmd, "selector", strlen(cmd))==0) // selectors
+		{
+			if(daemon)
+				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
+			else
+				fprintf(stderr, "Listing SELECTORS\n");
+			// no params yet
+			for(i=0;i<nsels;i++)
+			{
+				int ent=sort[i].ent;
+				int file=entries[ent].file;
+				if(daemon)
+					printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+				else
+					fprintf(stderr, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+			}
+			printf(".\n");
+		}
+		else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+		{
+			// no params yet
+			errupt++;
+		}
+		else
+		{
+			if(daemon)
+				printf("ERR:EBADCMD:\"%s\"\n", cmd);
+			else
+				fprintf(stderr, "Unrecognised command %s!\n", cmd);
+		}
+		free(parmv);
+		free(input);
 	}
 	return(0);
 }
 
-/* WARNING, this is not the same as my usual getl(); this one keeps the \n */
+/* WARNING, this fgetl() is not like my usual getl(); this one keeps the \n */
 // gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
-char * getl(FILE *fp)
+char * fgetl(FILE *fp)
 {
 	char * lout = (char *)malloc(81);
 	int i=0;
@@ -501,6 +544,42 @@ char * getl(FILE *fp)
 		}
 		if(c=='\n') // we do want to keep them this time
 			break;
+	}
+	lout[i]=0;
+	char *nlout=(char *)realloc(lout, i+1);
+	if(nlout==NULL)
+	{
+		return(lout); // it doesn't really matter (assuming realloc is a decent implementation and hasn't nuked the original pointer), we'll just have to temporarily waste a bit of memory
+	}
+	return(nlout);
+}
+
+char * getl(char * prompt)
+{
+	printf("%s", prompt);
+	fflush(stdout);
+	// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
+	char * lout = (char *)malloc(81);
+	int i=0;
+	char c;
+	while(1)
+	{
+		c = getchar();
+		if (c == 10)
+			break;
+		if (c != 0)
+		{
+			lout[i++]=c;
+			if ((i%80) == 0)
+			{
+				if ((lout = (char *)realloc(lout, i+81))==NULL)
+				{
+					printf("\nNot enough memory to store input!\n");
+					free(lout);
+					return(NULL);
+				}
+			}
+		}
 	}
 	lout[i]=0;
 	char *nlout=(char *)realloc(lout, i+1);
