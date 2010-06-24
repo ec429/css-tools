@@ -79,25 +79,27 @@ int main(int argc, char *argv[])
 	bool wnewline=true;
 	bool wdupfile=true;
 	int maxwarnings=10;
+	FILE *output=stdout;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
 		char *argt=argv[arg];
 		if((strcmp(argt, "-h")==0)||(strcmp(argt, "--help")==0))
 		{
-			fprintf(stderr, USAGE_STRING"\n");
+			fprintf(output, USAGE_STRING"\n");
 			return(0);
 		}
 		else if((strcmp(argt, "-d")==0)||(strcmp(argt, "--daemon")==0))
 		{
 			daemon=true;
-			fprintf(stderr, "cssi: Daemon mode is active.\n");
+			output=stderr;
+			fprintf(output, "cssi: Daemon mode is active.\n");
 			printf("CSSI:\"%s\"\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
 		}
 		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
 		{
 			trace=true;
-			fprintf(stderr, "cssi: Tracing on stderr\n");
+			fprintf(output, "cssi: Tracing on stderr\n");
 		}
 		else if(strcmp(argt, "-Wall")==0)
 		{
@@ -145,7 +147,7 @@ int main(int argc, char *argv[])
 	}
 	if(filename==NULL)
 	{
-		fprintf(stderr, "cssi: Error: No file given on command line!\n"USAGE_STRING"\n");
+		fprintf(output, "cssi: Error: No file given on command line!\n"USAGE_STRING"\n");
 		if(daemon)
 			printf("ERR:ENOFILE\n");
 		return(1);
@@ -165,7 +167,7 @@ int main(int argc, char *argv[])
 			{
 				if(wdupfile && (nwarnings++<maxwarnings))
 				{
-					fprintf(stderr, "cssi: warning: Duplicate file in set%s: %s\n", i<initnfiles?"":" (from @import)", filename[i]);
+					fprintf(output, "cssi: warning: Duplicate file in set%s: %s\n", i<initnfiles?"":" (from @import)", filename[i]);
 					if(daemon)
 						printf("WARN:WDUPFILE:%d:\"%s\"\n", i<initnfiles?0:1, filename[i]);
 				}
@@ -178,7 +180,7 @@ int main(int argc, char *argv[])
 			fp=fopen(filename[i], "r");
 		if(!fp)
 		{
-			fprintf(stderr, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
+			fprintf(output, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
 			if(daemon)
 				printf("ERR:ECANTREAD:\"%s\"\n", i==nfiles?"<stdin>":filename[i]);
 			return(1);
@@ -197,7 +199,7 @@ int main(int argc, char *argv[])
 			nlines--;
 		}
 		
-		fprintf(stderr, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
+		fprintf(output, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
 			printf("PROC:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 	
@@ -216,7 +218,7 @@ int main(int argc, char *argv[])
 		{
 			char *curr=mfile[line]+pos;
 			if(trace)
-				fprintf(stderr, "%d\t%d:%d\t%c\n", state, line+1, pos+1, *curr);
+				fprintf(output, "%d\t%d:%d\t%c\n", state, line+1, pos+1, *curr);
 			if(*curr==0)
 			{
 				if(line==nlines-1)
@@ -225,8 +227,8 @@ int main(int argc, char *argv[])
 				}
 				else
 				{
-					fprintf(stderr, PARSERR"\tUnexpected EOL\n", PARSARG);
-					fprintf(stderr, PMKLINE);
+					fprintf(output, PARSERR"\tUnexpected EOL\n", PARSARG);
+					fprintf(output, PMKLINE);
 					if(daemon)
 						printf(DPARSERR"unexpected EOL\n", DPARSARG);
 					return(2);
@@ -269,8 +271,8 @@ int main(int argc, char *argv[])
 					case 0: // selector, comma, or braces
 						if(nonl && wnewline && (nwarnings++<maxwarnings))
 						{
-							fprintf(stderr, PARSEWARN"\tMissing newline between entries\n", PARSEWARG);
-							fprintf(stderr, PMKLINE);
+							fprintf(output, PARSEWARN"\tMissing newline between entries\n", PARSEWARG);
+							fprintf(output, PMKLINE);
 							if(daemon)
 								printf(DPARSEWARN"missing newline between entries\n", DPARSEWARG);
 						}
@@ -282,8 +284,8 @@ int main(int argc, char *argv[])
 						{
 							if(pos!=0 && (nwarnings++<maxwarnings))
 							{
-								fprintf(stderr, PARSEWARN"\tAt-rule not at start of line\n", PARSEWARG);
-								fprintf(stderr, PMKLINE);
+								fprintf(output, PARSEWARN"\tAt-rule not at start of line\n", PARSEWARG);
+								fprintf(output, PMKLINE);
 								if(daemon)
 									printf(DPARSEWARN"at-rule not at start of line\n", DPARSEWARG);
 							}
@@ -295,8 +297,8 @@ int main(int argc, char *argv[])
 								char *url=strchr(curr, '(');
 								if(!url)
 								{
-									fprintf(stderr, PARSERR"\tMalformed @import directive\n", PARSARG);
-									fprintf(stderr, PMKLINE);
+									fprintf(output, PARSERR"\tMalformed @import directive\n", PARSARG);
+									fprintf(output, PMKLINE);
 									if(daemon)
 										printf(DPARSERR"malformed @import directive\n", DPARSARG);
 									return(2);
@@ -305,8 +307,8 @@ int main(int argc, char *argv[])
 								char *endurl=strchr(url, ')');
 								if(!endurl)
 								{
-									fprintf(stderr, PARSERR"\tMalformed @import directive\n", PARSARG);
-									fprintf(stderr, PMKLINE);
+									fprintf(output, PARSERR"\tMalformed @import directive\n", PARSARG);
+									fprintf(output, PMKLINE);
 									if(daemon)
 										printf(DPARSERR"malformed @import directive\n", DPARSARG);
 									return(2);
@@ -320,8 +322,8 @@ int main(int argc, char *argv[])
 							}
 							else
 							{
-								fprintf(stderr, PARSERR"\tUnrecognised at-rule\n", PARSARG);
-								fprintf(stderr, PMKLINE);
+								fprintf(output, PARSERR"\tUnrecognised at-rule\n", PARSARG);
+								fprintf(output, PMKLINE);
 								if(daemon)
 									printf(DPARSERR"unrecognised at-rule\n", DPARSARG);
 								return(2);
@@ -343,8 +345,8 @@ int main(int argc, char *argv[])
 								}
 								else
 								{
-									fprintf(stderr, PARSERR"\tEmpty selector before comma\n", PARSARG);
-									fprintf(stderr, PMKLINE);
+									fprintf(output, PARSERR"\tEmpty selector before comma\n", PARSARG);
+									fprintf(output, PMKLINE);
 									if(daemon)
 										printf(DPARSERR"empty selector before comma\n", DPARSARG);
 									return(2);
@@ -355,8 +357,8 @@ int main(int argc, char *argv[])
 							{
 								if(!curstring)
 								{
-									fprintf(stderr, PARSERR"\tEmpty selector before decl\n", PARSARG);
-									fprintf(stderr, PMKLINE);
+									fprintf(output, PARSERR"\tEmpty selector before decl\n", PARSARG);
+									fprintf(output, PMKLINE);
 									if(daemon)
 										printf(DPARSERR"empty selector before decl\n", DPARSARG);
 									return(2);
@@ -421,8 +423,8 @@ int main(int argc, char *argv[])
 						}
 					break;
 					default:
-						fprintf(stderr, PARSERR"\tNo such state!\n", PARSARG);
-						fprintf(stderr, PMKLINE);
+						fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
+						fprintf(output, PMKLINE);
 						if(daemon)
 							printf(DPARSERR"no such state\n", DPARSARG);
 						return(2);
@@ -431,22 +433,22 @@ int main(int argc, char *argv[])
 			}
 		}
 		free(mfile);
-		fprintf(stderr, "cssi: parsed %s\n", i==nfiles?"<stdin>":filename[i]);
+		fprintf(output, "cssi: parsed %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
 			printf("PARSED:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 		skip:;
 	}
-	fprintf(stderr, "cssi: Parsing completed\n");
+	fprintf(output, "cssi: Parsing completed\n");
 	if(daemon)
 		printf("PARSED*\n");
 	if(nwarnings>maxwarnings)
 	{
-		fprintf(stderr, "cssi: warning: %d more warnings were not displayed.\n", nwarnings-maxwarnings);
+		fprintf(output, "cssi: warning: %d more warnings were not displayed.\n", nwarnings-maxwarnings);
 		if(daemon)
 			printf("XSWARN:%d\n", nwarnings-maxwarnings);
 	}
 	
-	fprintf(stderr, "cssi: collating selectors\n");
+	fprintf(output, "cssi: collating selectors\n");
 	if(daemon)
 		printf("COLL\n");
 	int nsels=0;
@@ -486,7 +488,7 @@ int main(int argc, char *argv[])
 			if(daemon)
 				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 			else
-				fprintf(stderr, "Listing SELECTORS\n");
+				fprintf(output, "Listing SELECTORS\n");
 			// no params yet
 			for(i=0;i<nsels;i++)
 			{
@@ -495,7 +497,7 @@ int main(int argc, char *argv[])
 				if(daemon)
 					printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 				else
-					fprintf(stderr, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+					fprintf(output, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 			}
 			if(daemon)
 				printf(".\n");
@@ -510,7 +512,7 @@ int main(int argc, char *argv[])
 			if(daemon)
 				printf("ERR:EBADCMD:\"%s\"\n", cmd);
 			else
-				fprintf(stderr, "Unrecognised command %s!\n", cmd);
+				fprintf(output, "Unrecognised command %s!\n", cmd);
 		}
 		free(parmv);
 		free(input);

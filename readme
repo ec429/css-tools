@@ -4,19 +4,37 @@ css-tools - make sense of your CSS
 ==CSSI==
 cssi is a command-line program which reads and parses one or many CSS files, then reports on their structure.
 It's unfinished; right now, it parses the CSS file, then sorts and lists the selectors, enabling you to quickly scan for duplicates.
-Informational output goes to stderr.
-Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use cssi.
+Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use cssi.  Long-form output will still be produced, but redirected to stderr.
 Options:
 	-d,--daemon		Run in daemon mode
 	-h,--help		Invocation help
 	-t,--trace		Trace the parser state-machine (for debugging)
 	-m,--max-warn=<maxwarnings>
 					Output of warning messages stops after the <maxwarnings>th.  Default is 10
-	-Wall,-Wno-all	Enable/disable all warnings (though there's only one so far)
+	-Wall,-Wno-all	Enable/disable all warnings (though there're only two so far)
 	-Wnewline		Enable the "Missing newline" warning (two rules on the same line).  This is the default
 	-Wno-newline	Disable the "Missing newline" warning
+	-Wdupfile		Enable the "Duplicate File" warning.  This is the default
+	-Wno-dupfile	Disable the "Duplicate File" warning.  (Duplicate files will be skipped silently)
 	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)
 A filename of - (dash) will cause cssi to read from stdin.
 Sample usage:
-	./cssi -I=/path/to/css/ /path/to/css/main.css /path/to/css/others.css 2>&1 | less
+	$ ./cssi -I=/path/to/css/ /path/to/css/test.css /path/to/css/sub.css
+		cssi: processing test.css
+		cssi: parsed test.css
+		cssi: processing sub.css
+		cssi: parsed sub.css
+		cssi: warning: Duplicate file in set (from @import): sub.css
+		cssi: Parsing completed
+		cssi: collating selectors
+		cssi>sel
+		Listing SELECTORS
+		In sub.css at 71:       #access
+		In sub.css at 73:       #access h3
+		In sub.css at 346:      #adduser
+	<snip />
+		In sub.css at 432:      textarea
+		In test.css at 49:      ul
+		cssi>q
+	$
 
