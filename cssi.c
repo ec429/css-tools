@@ -68,8 +68,8 @@ selector * mergesort(selector * array, int len);
 
 int main(int argc, char *argv[])
 {
-	unsigned char version_maj, version_min, version_rev;
-	sscanf(VERSION, "%hhu.%hhu.%hhu", &version_maj, &version_min, &version_rev);
+	/*unsigned char version_maj, version_min, version_rev;
+	sscanf(VERSION, "%hhu.%hhu.%hhu", &version_maj, &version_min, &version_rev);*/
 	int nfiles=0;
 	char ** filename=NULL; // files to load
 	char *importpath="";
@@ -77,6 +77,7 @@ int main(int argc, char *argv[])
 	bool dash=false;
 	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
+	int maxwarnings=10;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
@@ -90,12 +91,22 @@ int main(int argc, char *argv[])
 		{
 			daemon=true;
 			fprintf(stderr, "Daemon mode is active.\n");
-			printf("CSSI:%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
+			printf("CSSI:%s\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
 		}
 		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
 		{
 			trace=true;
 			fprintf(stderr, "Tracing on stderr\n");
+		}
+		else if(strcmp(argt, "-Wall")==0)
+		{
+			wnewline=true;
+			// ALL of one warning!
+		}
+		else if(strcmp(argt, "-Wno-all")==0)
+		{
+			wnewline=false;
+			// ALL of one warning!
 		}
 		else if(strcmp(argt, "-Wnewline")==0)
 		{
@@ -108,6 +119,10 @@ int main(int argc, char *argv[])
 		else if(strncmp(argt, "-I=", 3)==0)
 		{
 			importpath=argt+3;
+		}
+		else if((strncmp(argt, "-m=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
+		{
+			sscanf(strchr(argt, '=')+1, "%d", &maxwarnings);
 		}
 		else if(strcmp(argt, "-")==0)
 		{
@@ -129,6 +144,7 @@ int main(int argc, char *argv[])
 		return(1);
 	}
 	int i;
+	int nwarnings=0;
 	int nentries=0;
 	entry * entries=NULL;
 	for(i=0;i<nfiles+(dash?1:0);i++)
@@ -231,7 +247,7 @@ int main(int argc, char *argv[])
 				switch(state)
 				{
 					case 0: // selector, comma, or braces
-						if(nonl && wnewline)
+						if(nonl && wnewline && (nwarnings++<maxwarnings))
 						{
 							fprintf(stderr, PARSEWARN"\tMissing newline between entries\n", PARSEWARG);
 							fprintf(stderr, PMKLINE);
@@ -244,7 +260,7 @@ int main(int argc, char *argv[])
 						}
 						else if(*curr=='@')
 						{
-							if(pos!=0)
+							if(pos!=0 && (nwarnings++<maxwarnings))
 							{
 								fprintf(stderr, PARSEWARN"\tAt-rule not at start of line\n", PARSEWARG);
 								fprintf(stderr, PMKLINE);
@@ -398,6 +414,15 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "cssi parsed %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
 			printf("PARSED:%s\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
+	}
+	fprintf(stderr, "Parsing completed\n");
+	if(daemon)
+		printf("PARSED*\n");
+	if(nwarnings>maxwarnings)
+	{
+		fprintf(stderr, "%d more warnings were not displayed.\n", nwarnings-maxwarnings);
+		if(daemon)
+			printf("XSWARN:%d\n", nwarnings-maxwarnings);
 	}
 	
 	fprintf(stderr, "cssi collating selectors\n");
