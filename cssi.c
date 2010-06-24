@@ -68,7 +68,7 @@ selector * mergesort(selector * array, int len);
 
 int main(int argc, char *argv[])
 {
-	int version_maj, version_min, version_rev;
+	unsigned char version_maj, version_min, version_rev;
 	sscanf(VERSION, "%hhu.%hhu.%hhu", &version_maj, &version_min, &version_rev);
 	int nfiles=0;
 	char ** filename=NULL; // files to load
