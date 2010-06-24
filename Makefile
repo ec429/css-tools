@@ -16,3 +16,4 @@ dist: all
 	cp readme css-tools/
 	tar -cvvf css-tools_$(VERSION).tar css-tools/
 	gzip css-tools_$(VERSION).tar
+	rm -r css-tools

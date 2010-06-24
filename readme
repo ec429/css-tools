@@ -10,9 +10,12 @@ Options:
 	-d,--daemon		Run in daemon mode
 	-h,--help		Invocation help
 	-t,--trace		Trace the parser state-machine (for debugging)
+	-m,--max-warn=<maxwarnings>
+					Output of warning messages stops after the <maxwarnings>th.  Default is 10
+	-Wall,-Wno-all	Enable/disable all warnings (though there's only one so far)
 	-Wnewline		Enable the "Missing newline" warning (two rules on the same line).  This is the default
-	-Wno-newline	Disable the "Missing newline" warning (two rules on the same line)
-	-I=importpath	Sets the path to use for @import at-rules (default is the current directory)
+	-Wno-newline	Disable the "Missing newline" warning
+	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)
 A filename of - (dash) will cause cssi to read from stdin.
 Sample usage:
 	./cssi -I=/path/to/css/ /path/to/css/main.css /path/to/css/others.css 2>&1 | less

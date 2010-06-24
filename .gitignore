@@ -1,2 +1,5 @@
 cssi
 *.css
+*.tar
+*.gz
+css-tools/
