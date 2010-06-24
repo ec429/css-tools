@@ -23,15 +23,15 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "tags.h"
+//#include "tags.h" // not currently used
 
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: cssi [-d][-t] [-I=<importpath>] [-W[no-]newline] <filename> [...]"
 
-#define PARSERR		"Parse error (state %d) at %d:%d\n"
+#define PARSERR		"cssi: Error (Parser, state %d) at %d:%d\n"
 #define PARSARG		state, line+1, pos+1
 
-#define PARSEWARN	"Warning (state %d) at %d:%d\n"
+#define PARSEWARN	"cssi: warning: (Parser, state %d) at %d:%d\n"
 #define PARSEWARG	state, line+1, pos+1
 
 #define DPARSERR	"ERR:EPARSE:%d,%d.%d:"
@@ -74,9 +74,9 @@ int main(int argc, char *argv[])
 	char ** filename=NULL; // files to load
 	char *importpath="";
 	bool daemon=false; // are we talking to another process?
-	bool dash=false;
 	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
+	bool wdupfile=true;
 	int maxwarnings=10;
 	int arg;
 	for(arg=1;arg<argc;arg++)
@@ -90,23 +90,25 @@ int main(int argc, char *argv[])
 		else if((strcmp(argt, "-d")==0)||(strcmp(argt, "--daemon")==0))
 		{
 			daemon=true;
-			fprintf(stderr, "Daemon mode is active.\n");
+			fprintf(stderr, "cssi: Daemon mode is active.\n");
 			printf("CSSI:%s\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
 		}
 		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
 		{
 			trace=true;
-			fprintf(stderr, "Tracing on stderr\n");
+			fprintf(stderr, "cssi: Tracing on stderr\n");
 		}
 		else if(strcmp(argt, "-Wall")==0)
 		{
 			wnewline=true;
-			// ALL of one warning!
+			wdupfile=true;
+			// ALL of two warnings!
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
 			wnewline=false;
-			// ALL of one warning!
+			wdupfile=false;
+			// ALL of two warnings!
 		}
 		else if(strcmp(argt, "-Wnewline")==0)
 		{
@@ -116,6 +118,14 @@ int main(int argc, char *argv[])
 		{
 			wnewline=false;
 		}
+		else if(strcmp(argt, "-Wdupfile")==0)
+		{
+			wdupfile=true;
+		}
+		else if(strcmp(argt, "-Wno-dupfile")==0)
+		{
+			wdupfile=false;
+		}
 		else if(strncmp(argt, "-I=", 3)==0)
 		{
 			importpath=argt+3;
@@ -123,10 +133,6 @@ int main(int argc, char *argv[])
 		else if((strncmp(argt, "-m=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
 			sscanf(strchr(argt, '=')+1, "%d", &maxwarnings);
-		}
-		else if(strcmp(argt, "-")==0)
-		{
-			dash=true;
 		}
 		else
 		{
@@ -136,9 +142,9 @@ int main(int argc, char *argv[])
 			filename[nfiles-1]=argt;
 		}
 	}
-	if(!dash && (filename==NULL))
+	if(filename==NULL)
 	{
-		fprintf(stderr, "No file given on command line!\n"USAGE_STRING"\n");
+		fprintf(stderr, "cssi: Error: No file given on command line!\n"USAGE_STRING"\n");
 		if(daemon)
 			printf("ERR:ENOFILE:No file given on command line!\n");
 		return(1);
@@ -146,17 +152,32 @@ int main(int argc, char *argv[])
 	int i;
 	int nwarnings=0;
 	int nentries=0;
+	int initnfiles=nfiles; // initial nfiles, so we know if we've been @imported
 	entry * entries=NULL;
-	for(i=0;i<nfiles+(dash?1:0);i++)
+	for(i=0;i<nfiles;i++)
 	{
 		FILE *fp=NULL;
-		if(i==nfiles)
+		int j;
+		for(j=0;j<i;j++)
+		{
+			if(strcmp(filename[i], filename[j])==0)
+			{
+				if(wdupfile && (nwarnings++<maxwarnings))
+				{
+					fprintf(stderr, "cssi: warning: Duplicate file in set%s: %s\n", i<initnfiles?"":" (from @import)", filename[i]);
+					if(daemon)
+						printf("WARN:WDUPFILE:%d:%s\n", i<initnfiles?0:1, filename[i]);
+				}
+				goto skip; // there is *nothing* *wrong* with the occasional goto
+			}
+		}
+		if(strcmp(filename[i], "-")==0)
 			fp=stdin;
 		else
 			fp=fopen(filename[i], "r");
 		if(!fp)
 		{
-			fprintf(stderr, "Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
+			fprintf(stderr, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
 			if(daemon)
 				printf("ERR:ECANTREAD:Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
 			return(1);
@@ -175,11 +196,9 @@ int main(int argc, char *argv[])
 			nlines--;
 		}
 		
-		fprintf(stderr, "cssi processing %s\n", i==nfiles?"<stdin>":filename[i]);
+		fprintf(stderr, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
 			printf("PROC:%s\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
-	
-		int ntags=sizeof(tags)/sizeof(char *);
 	
 		// Parse it with a state machine
 		int state=0;
@@ -411,21 +430,22 @@ int main(int argc, char *argv[])
 			}
 		}
 		free(mfile);
-		fprintf(stderr, "cssi parsed %s\n", i==nfiles?"<stdin>":filename[i]);
+		fprintf(stderr, "cssi: parsed %s\n", i==nfiles?"<stdin>":filename[i]);
 		if(daemon)
 			printf("PARSED:%s\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
+		skip:;
 	}
-	fprintf(stderr, "Parsing completed\n");
+	fprintf(stderr, "cssi: Parsing completed\n");
 	if(daemon)
 		printf("PARSED*\n");
 	if(nwarnings>maxwarnings)
 	{
-		fprintf(stderr, "%d more warnings were not displayed.\n", nwarnings-maxwarnings);
+		fprintf(stderr, "cssi: warning: %d more warnings were not displayed.\n", nwarnings-maxwarnings);
 		if(daemon)
 			printf("XSWARN:%d\n", nwarnings-maxwarnings);
 	}
 	
-	fprintf(stderr, "cssi collating selectors\n");
+	fprintf(stderr, "cssi: collating selectors\n");
 	if(daemon)
 		printf("COLL\n");
 	int nsels=0;

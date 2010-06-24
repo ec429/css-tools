@@ -100,3 +100,5 @@ char *tags[]=
 	"u", // DEPRECATED
 	"var"
 };
+
+int ntags=sizeof(tags)/sizeof(char *);
