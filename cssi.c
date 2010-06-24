@@ -497,7 +497,8 @@ int main(int argc, char *argv[])
 				else
 					fprintf(stderr, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 			}
-			printf(".\n");
+			if(daemon)
+				printf(".\n");
 		}
 		else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
 		{
