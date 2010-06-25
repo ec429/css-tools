@@ -25,6 +25,10 @@
 
 #include "tags.h"
 
+// helper fn macros
+#define max(a,b)	((a)>(b)?(a):(b))
+#define min(a,b)	((a)<(b)?(a):(b))
+
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: cssi [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]"
 
@@ -42,8 +46,8 @@
 
 #define PMKLINE		"%.*s/* <- */%s\n", pos+1, mfile[line], mfile[line]+pos+1
 
-#define SPARSERR		"cssi: Error (Sel-Parser, state %d) SelId %d, col %d\n"
-#define SPARSARG		state, sid, pos+1
+#define SPARSERR	"cssi: Error (Sel-Parser, state %d) SelId %d, col %d\n"
+#define SPARSARG	state, sid, pos+1
 
 #define SPARSEWARN	"cssi: warning: (Sel-Parser, state %d) SelId %d, col %d\n"
 #define SPARSEWARG	state, sid, pos+1
@@ -54,7 +58,7 @@
 #define DSPARSEWARN	"WARN:WSPARSE:%d,%d.%d:"
 #define DSPARSEWARG	state, sid, pos /* note, this is 0-based */
 
-#define SPMKLINE		"%.*s/* <- */%s\n", pos+1, s.text, s.text+pos+1
+#define SPMKLINE	"%.*s/* <- */%s\n", pos+1, s.text, s.text+pos+1
 
 // structs for representing CSS things
 
@@ -626,16 +630,129 @@ int main(int argc, char *argv[])
 			if(daemon)
 				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 			else
-				fprintf(output, "Listing SELECTORS\n");
-			// no params yet
+				fprintf(output, "cssi: matching SELECTORS\n");
 			for(i=0;i<nsels;i++)
 			{
+				bool show=true;
 				int ent=sort[i].ent;
 				int file=entries[ent].file;
-				if(daemon)
-					printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
-				else
-					fprintf(output, "%d\tIn %s at %d:\t%s\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+				int parm;
+				for(parm=0;(parm<parmc)&&show;parm++)
+				{
+					char *sparm=strdup(parmv[parm]);
+					char *cmp=sparm;
+					while(*cmp && !strchr("=<>:", *cmp))
+						cmp++;
+					if(!*cmp)
+					{
+						if(daemon)
+							printf("ERR:EBADPARM:NOCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+						else
+							fprintf(output, "cssi: Error: Bad matcher %s (no comparator found)\n", parmv[parm]);
+						i=nsels;show=false;break;
+					}
+					char wcmp=*cmp;
+					*cmp=0;
+					cmp++;
+					bool num=false;
+					bool tree=false;
+					char *smatch=NULL;
+					int nmatch;
+					if(strcmp(sparm, "sid")==0)
+					{
+						num=true;nmatch=i;
+					}
+					else if(strcmp(sparm, "file")==0)
+					{
+						smatch=filename[file];
+					}
+					else if(strcmp(sparm, "line")==0)
+					{
+						num=true;nmatch=entries[ent].line+(daemon?0:1); // daemon mode uses 0-based linenos
+					}
+					else if(strcmp(sparm, "match")==0)
+					{
+						tree=true;
+						smatch=(char *)sort[i].chain; // it's a sel_ent *, really, not a char *
+					}
+					else
+					{
+						if(daemon)
+							printf("ERR:EBADPARM:BADPARAM:%d:\"%s\"\n", parm, parmv[parm]);
+						else
+							fprintf(output, "cssi: Error: Bad matcher %s (unrecognised param)\n", parmv[parm]);
+						i=nsels;show=false;break;
+					}
+					int inval=0;
+					if(num)
+					{
+						sscanf(cmp, "%d", &inval);
+					}
+					switch(wcmp)
+					{
+						case '=':
+							if(tree)
+							{
+								if(daemon)
+									printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+							else if(num)
+							{
+								show&=(nmatch == inval);
+							}
+							else
+							{
+								show&=(strcmp(smatch, cmp)==0);
+							}
+						break;
+						case '<':
+							if(num)
+							{
+								show&=(nmatch < inval);
+							}
+							else
+							{
+								if(daemon)
+									printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: '<' is for numerics only (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+						break;
+						case '>':
+							if(num)
+							{
+								show&=(nmatch > inval);
+							}
+							else
+							{
+								if(daemon)
+									printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: '>' is for numerics only (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+						break;
+						default: // this should be impossible
+							if(daemon)
+								printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+							else
+								fprintf(output, "cssi: Error: Bad matcher %s (bad comparator)\n", parmv[parm]);
+							i=nsels;show=false;break;
+						break;
+					}
+					free(sparm);
+				}
+				if(show)
+				{
+					if(daemon)
+						printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+					else
+						fprintf(output, "%d\tIn %s at %d:\t%s\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+				}
 			}
 			if(daemon)
 				printf(".\n");
@@ -650,9 +767,10 @@ int main(int argc, char *argv[])
 			if(daemon)
 				printf("ERR:EBADCMD:\"%s\"\n", cmd);
 			else
-				fprintf(output, "Unrecognised command %s!\n", cmd);
+				fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
 		}
-		free(parmv);
+		if(parmv)
+			free(parmv);
 		free(input);
 	}
 	return(0);

@@ -24,7 +24,21 @@ Warnings:
 	-Wnewline		Missing newline; two rules on the same line.  Default TRUE
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
 	-Watrule		At-rule positioning; an at-rule appears somewhere other than the start of a line, or is inside a selector.  Default TRUE
-Sample usage:
+Commands for the cssi shell:
+	sel <param><comparator><match> [...]
+		Lists selectors matching the specified params.
+		Valid <param>s:
+			sid		the SelId of the selector
+			file	the path/name of the file in which the selector appears
+			line	the line-number of the statement containing the selector
+			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'
+		Valid <comparator>s:
+			=		equality
+			<, >	gt/lt for numerics
+			:		satisfies regex
+		Param matches are ANDed together
+		
+Sample usage of cssi:
 	$ ./cssi -I=/path/to/css/ /path/to/css/test.css /path/to/css/sub.css
 		cssi: processing test.css
 		cssi: parsed test.css
