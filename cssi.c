@@ -792,7 +792,7 @@ int parse_selector(selector s, int sid)
 				}
 			break;
 			case 1: // read a string until the next identifier-delimiter
-				if(strchr(":.#[ ", *curr) || !*curr) // is *curr one of ':', '.', '#', '[', ' ', '\0'?
+				if(strchr(":.#[ >+", *curr) || !*curr) // is it time to end the string?
 				{
 					cstr=(char *)realloc(cstr, ++cstl);
 					cstr[cstl-1]=0;
