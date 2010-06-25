@@ -80,6 +80,7 @@ family;
 
 typedef enum
 {
+	NONE, // 'unknown', for error condition
 	UNIV,
 	TAG,
 	CLASS,
@@ -731,7 +732,7 @@ int parse_selector(selector s, int sid)
 	int cstl=0;
 	family nextrel=SELF;
 	sel_elt * node=s.chain;
-	seltype type=UNIV;
+	seltype type=NONE;
 	while(*(curr=s.text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
 	{
 		switch(state)
@@ -751,14 +752,18 @@ int parse_selector(selector s, int sid)
 					type=ID;
 					cstr=NULL;cstl=0;
 				}
+				else if(*curr=='*')
+				{
+					type=UNIV;
+					cstr=NULL;
+					state=2;
+					pos++;
+				}
 				else
 				{
-					fprintf(output, SPARSERR"\tUnrecognised identifier\n", SPARSARG);
-					fprintf(output, SPMKLINE);
-					if(daemon)
-						printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
-					tree_free(s.chain);
-					return(1);
+					type=NONE; // don't know - it might be a tag but we can't check till we've read the whole string
+					state=1;
+					pos++;
 				}
 			break;
 			case 1: // read a string until the next identifier-delimiter
@@ -773,7 +778,16 @@ int parse_selector(selector s, int sid)
 					pos++;
 				}
 			break;
-			case 2: // have read .class-name
+			case 2: // have read name
+				if(type==NONE)
+				{
+					fprintf(output, SPARSERR"\tUnrecognised identifier\n", SPARSARG);
+					fprintf(output, SPMKLINE);
+					if(daemon)
+						printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
+					tree_free(s.chain);
+					return(1);
+				}
 				if(!node)
 				{
 					node=(sel_elt *)malloc(sizeof(sel_elt));
