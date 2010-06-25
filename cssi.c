@@ -23,7 +23,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-//#include "tags.h" // not currently used
+#include "tags.h"
 
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: cssi [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]"
@@ -110,7 +110,7 @@ selector;
 // function protos
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
 char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
-selector * mergesort(selector * array, int len);
+selector * selmergesort(selector * array, int len);
 int parse_selector(selector, int);
 void tree_free(sel_elt * node);
 
@@ -522,7 +522,7 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-	selector * sort=mergesort(sels, nsels);
+	selector * sort=selmergesort(sels, nsels);
 	
 	fprintf(output, "cssi: collated & parsed selectors\n");
 	if(daemon)
@@ -652,7 +652,7 @@ char * getl(char * prompt)
 	return(nlout);
 }
 
-selector * mergesort(selector * array, int len)
+selector * selmergesort(selector * array, int len)
 {
 	if(len<1)
 		return(NULL);
@@ -689,8 +689,8 @@ selector * mergesort(selector * array, int len)
 				else
 					right[j-i]=array[j];
 			}
-			left=mergesort(left, i);
-			right=mergesort(right, len-i);
+			left=selmergesort(left, i);
+			right=selmergesort(right, len-i);
 			int p=0,q=0;
 			for(j=0;j<len;j++)
 			{
