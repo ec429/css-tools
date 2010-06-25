@@ -129,6 +129,7 @@ int main(int argc, char *argv[])
 	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
 	bool wdupfile=true;
+	bool watrule=true;
 	int maxwarnings=10;
 	int arg;
 	for(arg=1;arg<argc;arg++)
@@ -178,6 +179,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-dupfile")==0)
 		{
 			wdupfile=false;
+		}
+		else if(strcmp(argt, "-Watrule")==0)
+		{
+			watrule=true;
+		}
+		else if(strcmp(argt, "-Wno-atrule")==0)
+		{
+			watrule=false;
 		}
 		else if(strncmp(argt, "-I=", 3)==0)
 		{
@@ -317,9 +326,7 @@ int main(int argc, char *argv[])
 					curstring[curstrlen-1]=*curr;
 					curstring[curstrlen]=0;
 				}
-				//fprintf(stderr, "free(%p)\n", mfile[line]);
 				free(mfile[line]);
-				//fprintf(stderr, "free()d ok\n");
 				line++;
 				pos=0;
 				nonl=false;
@@ -353,7 +360,7 @@ int main(int argc, char *argv[])
 						}
 						else if(*curr=='@')
 						{
-							if(pos!=0 && (nwarnings++<maxwarnings))
+							if(((pos!=0) || current.nmatches) && watrule && (nwarnings++<maxwarnings))
 							{
 								fprintf(output, PARSEWARN"\tAt-rule not at start of line\n", PARSEWARG);
 								fprintf(output, PMKLINE);

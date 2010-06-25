@@ -2,9 +2,13 @@ css-tools - make sense of your CSS
 ===Documentation===
 
 ==CSSI==
+
+	cssi [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]
+
 cssi is a command-line program which reads and parses one or many CSS files, then reports on their structure.
 It's unfinished; right now, it parses the CSS file, then sorts and lists the selectors, enabling you to quickly scan for duplicates.
-Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use cssi.  Long-form output will still be produced, but redirected to stderr.
+Note that *cssi is not a validator*; it accepts some invalid constructs, and probably rejects some valid ones (although the latter would be a bug).
+Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use cssi.  Some long-form output will still be produced, but redirected to stderr.
 Options:
 	-d,--daemon		Run in daemon mode
 	-h,--help		Invocation help
@@ -12,12 +16,14 @@ Options:
 	-m,--max-warn=<maxwarnings>
 					Output of warning messages stops after the <maxwarnings>th.  Default is 10
 	-Wall,-Wno-all	Enable/disable all warnings (though there're only two so far)
-	-Wnewline		Enable the "Missing newline" warning (two rules on the same line).  This is the default
-	-Wno-newline	Disable the "Missing newline" warning
-	-Wdupfile		Enable the "Duplicate File" warning.  This is the default
-	-Wno-dupfile	Disable the "Duplicate File" warning.  (Duplicate files will be skipped silently)
+	-W<warning>		Enable the specified warning
+	-Wno-<warning>	Disable the specified warning
 	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)
 A filename of - (dash) will cause cssi to read from stdin.
+Warnings:
+	-Wnewline		Missing newline; two rules on the same line.  Default TRUE
+	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
+	-Watrule		At-rule positioning; an at-rule appears somewhere other than the start of a line, or is inside a selector.  Default TRUE
 Sample usage:
 	$ ./cssi -I=/path/to/css/ /path/to/css/test.css /path/to/css/sub.css
 		cssi: processing test.css
