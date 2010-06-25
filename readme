@@ -15,7 +15,7 @@ Options:
 	-t,--trace		Trace the parser state-machine (for debugging)
 	-m,--max-warn=<maxwarnings>
 					Output of warning messages stops after the <maxwarnings>th.  Default is 10
-	-Wall,-Wno-all	Enable/disable all warnings (though there're only two so far)
+	-Wall,-Wno-all	Enable/disable all warnings
 	-W<warning>		Enable the specified warning
 	-Wno-<warning>	Disable the specified warning
 	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)

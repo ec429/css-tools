@@ -161,13 +161,13 @@ int main(int argc, char *argv[])
 		{
 			wnewline=true;
 			wdupfile=true;
-			// ALL of two warnings!
+			watrule=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
 			wnewline=false;
 			wdupfile=false;
-			// ALL of two warnings!
+			watrule=false;
 		}
 		else if(strcmp(argt, "-Wnewline")==0)
 		{
