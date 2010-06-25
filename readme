@@ -20,6 +20,7 @@ Options:
 	-Wno-<warning>	Disable the specified warning
 	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)
 A filename of - (dash) will cause cssi to read from stdin.
+An <importpath> (-I) will only affect files that come /after/ it on the command line.  @imported files will inherit the importpath of the (first) file which imported them.
 Warnings:
 	-Wnewline		Missing newline; two rules on the same line.  Default TRUE
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE

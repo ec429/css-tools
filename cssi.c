@@ -130,6 +130,7 @@ int main(int argc, char *argv[])
 	int nfiles=0;
 	char ** filename=NULL; // files to load
 	char *importpath="";
+	char ** assoc_ipath=NULL;
 	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
 	bool wdupfile=true;
@@ -206,6 +207,8 @@ int main(int argc, char *argv[])
 			nfiles++;
 			filename=(char **)realloc(filename, nfiles*sizeof(char *));
 			filename[nfiles-1]=argt;
+			assoc_ipath=(char **)realloc(assoc_ipath, nfiles*sizeof(char *));
+			assoc_ipath[nfiles-1]=importpath;
 		}
 	}
 	if(filename==NULL)
@@ -400,7 +403,9 @@ int main(int argc, char *argv[])
 								nfiles++;
 								filename=(char **)realloc(filename, nfiles*sizeof(char *));
 								filename[nfiles-1]=(char *)malloc(strlen(importpath)+strlen(url)+1);
-								sprintf(filename[nfiles-1], "%s%s", importpath, url);
+								sprintf(filename[nfiles-1], "%s%s", assoc_ipath[i], url);
+								assoc_ipath=(char **)realloc(assoc_ipath, nfiles*sizeof(char *));
+								assoc_ipath[nfiles-1]=assoc_ipath[i];
 							}
 							else if(strncmp(curr, "@media", strlen("@media"))==0)
 							{
