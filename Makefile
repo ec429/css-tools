@@ -5,7 +5,7 @@ VERSION ?= `git describe --tags`
 
 all: cssi
 
-cssi: cssi.c tags.h
+cssi: cssi.c
 	git describe --tags
 	$(CC) $(CFLAGS) -o cssi cssi.c -DVERSION=\"$(VERSION)\"
 
