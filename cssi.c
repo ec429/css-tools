@@ -46,10 +46,10 @@
 
 #define PMKLINE		"%.*s/* <- */%s\n", pos+1, mfile[line], mfile[line]+pos+1
 
-#define SPARSERR	"cssi: Error (Sel-Parser, state %d) SelId %d, col %d\n"
+#define SPARSERR	"cssi: Error (Sel-Parser, state %d) row %d, col %d\n"
 #define SPARSARG	state, sid, pos+1
 
-#define SPARSEWARN	"cssi: warning: (Sel-Parser, state %d) SelId %d, col %d\n"
+#define SPARSEWARN	"cssi: warning: (Sel-Parser, state %d) row %d, col %d\n"
 #define SPARSEWARG	state, sid, pos+1
 
 #define DSPARSERR	"ERR:ESPARSE:%d,%d.%d:"
@@ -58,7 +58,7 @@
 #define DSPARSEWARN	"WARN:WSPARSE:%d,%d.%d:"
 #define DSPARSEWARG	state, sid, pos /* note, this is 0-based */
 
-#define SPMKLINE	"%.*s/* <- */%s\n", pos+1, s.text, s.text+pos+1
+#define SPMKLINE	"%.*s/* <- */%s\n", pos+1, s->text, s->text+pos+1
 
 // structs for representing CSS things
 
@@ -105,9 +105,10 @@ sel_elt;
 
 typedef struct
 {
-	char * text; // we aren't parsing this yet
-	sel_elt * chain; // but when we do it'll go here
+	char * text; // when we parse this
+	sel_elt * chain; // it goes here
 	int ent; // index into entries table
+	bool dup; // does it have a duplicate anywhere else in the table?
 }
 selector;
 
@@ -115,8 +116,9 @@ selector;
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
 char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
 selector * selmergesort(selector * array, int len);
-int parse_selector(selector, int);
+int parse_selector(selector *, int);
 void tree_free(sel_elt * node);
+int treecmp(sel_elt * left, sel_elt * right);
 
 // global vars
 FILE *output;
@@ -596,17 +598,27 @@ int main(int argc, char *argv[])
 				txt[strlen(txt)-1]=0;
 			sels[nsels-1].ent=i;
 			sels[nsels-1].chain=NULL;
+			sels[nsels-1].dup=false;
 		}
 	}
-	selector * sort=selmergesort(sels, nsels);
 	
 	int nerrs=0;
 	for(i=0;i<nsels;i++)
 	{
 		int e;
-		if((e=parse_selector(sort[i], i))) // assigns & tests NZ
+		if((e=parse_selector(&sels[i], i))) // assigns & tests NZ
 		{
 			nerrs++;
+		}
+	}
+	
+	selector * sort=selmergesort(sels, nsels);
+	for(i=0;i<nsels-1;i++)
+	{
+		if(treecmp(sort[i].chain, sort[i+1].chain)==0)
+		{
+			sort[i].dup=true;
+			sort[i+1].dup=true;
 		}
 	}
 	
@@ -636,6 +648,7 @@ int main(int argc, char *argv[])
 				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 			else
 				fprintf(output, "cssi: matching SELECTORS\n");
+			int nrows=0;
 			for(i=0;i<nsels;i++)
 			{
 				bool show=true;
@@ -679,6 +692,17 @@ int main(int argc, char *argv[])
 					{
 						tree=true;
 						smatch=(char *)sort[i].chain; // it's a sel_ent *, really, not a char *
+					}
+					else if(strcmp(sparm, "dup")==0)
+					{
+						num=true;
+						nmatch=sort[i].dup?1:0;
+					}
+					else if(strcmp(sparm, "rows")==0)
+					{
+						num=true;
+						nmatch=nrows;
+						wcmp='<';
 					}
 					else
 					{
@@ -741,6 +765,24 @@ int main(int argc, char *argv[])
 								i=nsels;show=false;break;
 							}
 						break;
+						case ':':
+							if(num||tree)
+							{
+								if(daemon)
+									printf("ERR:EBADPARM:STRCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: ':' is for strings only (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+							else
+							{
+								if(daemon)
+									printf("ERR:ENOSYS:REGEXMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: regex-matching unimplemented (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+						break;
 						default: // this should be impossible
 							if(daemon)
 								printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
@@ -753,10 +795,11 @@ int main(int argc, char *argv[])
 				}
 				if(show)
 				{
+					nrows++;
 					if(daemon)
-						printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup?1:0, sort[i].text);
 					else
-						fprintf(output, "%d\tIn %s at %d:\t%s\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?"*":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 				}
 			}
 			if(daemon)
@@ -854,6 +897,7 @@ char * getl(char * prompt)
 	return(nlout);
 }
 
+// Sorts by sel_elt * chain, so you MUST parse_selector() first! (else they'll all be NULL so they'll all compare equal)
 selector * selmergesort(selector * array, int len)
 {
 	if(len<1)
@@ -866,7 +910,7 @@ selector * selmergesort(selector * array, int len)
 			return(rv);
 		break;
 		case 2:
-			if(strcmp(array[0].text, array[1].text)<=0)
+			if(treecmp(array[0].chain, array[1].chain)<=0)
 			{
 				rv[0]=array[0];
 				rv[1]=array[1];
@@ -891,41 +935,43 @@ selector * selmergesort(selector * array, int len)
 				else
 					right[j-i]=array[j];
 			}
-			left=selmergesort(left, i);
-			right=selmergesort(right, len-i);
+			selector *sleft=selmergesort(left, i);
+			selector *sright=selmergesort(right, len-i);
+			free(left);
+			free(right);
 			int p=0,q=0;
 			for(j=0;j<len;j++)
 			{
 				if(p==i)
 				{
-					rv[j]=right[q++];
+					rv[j]=sright[q++];
 				}
 				else if(q==len-i)
 				{
-					rv[j]=left[p++];
+					rv[j]=sleft[p++];
 				}
 				else
 				{
-					if(strcmp(left[p].text, right[q].text)<=0)
+					if(treecmp(sleft[p].chain, sright[q].chain)<=0)
 					{
-						rv[j]=left[p++];
+						rv[j]=sleft[p++];
 					}
 					else
 					{
-						rv[j]=right[q++];
+						rv[j]=sright[q++];
 					}
 				}
 			}
-			free(left);
-			free(right);
+			free(sleft);
+			free(sright);
 			return(rv);
 		break;
 	}
 }
 
-int parse_selector(selector s, int sid)
+int parse_selector(selector * s, int sid)
 {
-	s.chain=NULL; // initially empty
+	s->chain=NULL; // initially empty
 	// state machine
 	int state=0;
 	int pos=0;
@@ -933,10 +979,10 @@ int parse_selector(selector s, int sid)
 	char *cstr=NULL;
 	int cstl=0;
 	family nextrel=SELF;
-	sel_elt * node=s.chain;
+	sel_elt * node=s->chain;
 	seltype type=NONE;
 	bool igwhite=false;
-	while(*(curr=s.text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
+	while(*(curr=s->text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
 	{
 		switch(state)
 		{
@@ -1017,7 +1063,7 @@ int parse_selector(selector s, int sid)
 						fprintf(output, SPMKLINE);
 						if(daemon)
 							printf(DSPARSERR"empty selent\n", DSPARSARG);
-						tree_free(s.chain);
+						tree_free(s->chain);
 						return(1);
 					}
 					int i;
@@ -1035,21 +1081,25 @@ int parse_selector(selector s, int sid)
 						fprintf(output, SPMKLINE);
 						if(daemon)
 							printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
-						tree_free(s.chain);
+						tree_free(s->chain);
 						return(1);
 					}
 				}
 				if(!node)
 				{
 					node=(sel_elt *)malloc(sizeof(sel_elt));
+					node->nextrel=NONE;
+					s->chain=node;
 				}
 				else
 				{
 					node->nextrel=nextrel;nextrel=SELF;
-					node=node->next=(sel_elt *)malloc(sizeof(sel_elt));
+					node=(node->next=(sel_elt *)malloc(sizeof(sel_elt)));
 				}
 				node->type=type;
 				node->data=cstr;
+				node->next=NULL; // until (and if) we get one
+				node->nextrel=NONE; // until (and if) we get one
 				cstr=NULL;cstl=0; // disconnect the pointer
 				state=0; // return to reading-state
 				igwhite=false;
@@ -1059,7 +1109,7 @@ int parse_selector(selector s, int sid)
 				fprintf(output, SPMKLINE);
 				if(daemon)
 					printf(DSPARSERR"no such state\n", DSPARSARG);
-				tree_free(s.chain);
+				tree_free(s->chain);
 				return(1);
 			break;
 		}
@@ -1076,4 +1126,43 @@ void tree_free(sel_elt * node)
 			free(node->data);
 		free(node);
 	}
+}
+
+int treecmp(sel_elt * left, sel_elt * right)
+{
+	if(left && right)
+	{
+		int dtype=left->type - right->type;
+		if(dtype)
+			return(dtype);
+		if(left->data && right->data)
+		{
+			int ddata=strcmp(left->data, right->data);
+			if(ddata)
+				return(ddata);
+		}
+		else if(left->data)
+		{
+			return(1);
+		}
+		else if(right->data)
+		{
+			return(-1);
+		}
+		int drel=left->nextrel - right->nextrel;
+		if(drel)
+			return(drel);
+		if(left->next && right->next)
+			return(treecmp(left->next, right->next));
+		if(left->next) // and hence not right->next
+			return(1); // so right precedes left
+		if(right->next)
+			return(-1);
+		return(0);
+	}
+	if(left)
+		return(1);
+	if(right)
+		return(-1);
+	return(0);
 }

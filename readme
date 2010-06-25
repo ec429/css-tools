@@ -26,18 +26,24 @@ Warnings:
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
 	-Watrule		At-rule positioning; an at-rule appears somewhere other than the start of a line, or is inside a selector.  Default TRUE
 Commands for the cssi shell:
-	sel <param><comparator><match> [...]
+	selector <param><comparator><match> [...]
 		Lists selectors matching the specified params.
 		Valid <param>s:
 			sid		the SelId of the selector
 			file	the path/name of the file in which the selector appears
 			line	the line-number of the statement containing the selector
 			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'
+			dup		1 if the selector has duplicates, 0 otherwise
+			rows	max number of rows to show.  Effectively, row-number<value, where row-number is incremented each time a row is shown
 		Valid <comparator>s:
 			=		equality
 			<, >	gt/lt for numerics
 			:		satisfies regex
 		Param matches are ANDed together
+	quit
+		Quits cssi
+You only need to use enough characters of the command name to match it unambiguously.  The same does *not* apply to arguments, which must be given in full.
+Arguments are space-delimited.
 		
 Sample usage of cssi:
 	$ ./cssi -I=/path/to/css/ /path/to/css/test.css /path/to/css/sub.css
