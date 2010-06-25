@@ -779,6 +779,12 @@ int parse_selector(selector s, int sid)
 					pos++;
 					igwhite=true; // ' > ' is like '>', not ' '.
 				}
+				else if(*curr=='+')
+				{
+					nextrel=SBLG;
+					pos++;
+					igwhite=true; // ' + ' is like '+', not ' '.
+				}
 				else
 				{
 					type=NONE; // don't know - it might be a tag but we can't check till we've read the whole string
