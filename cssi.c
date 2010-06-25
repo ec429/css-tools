@@ -241,12 +241,29 @@ int main(int argc, char *argv[])
 		{
 			nlines++;
 			mfile=(char **)realloc(mfile, nlines*sizeof(char *));
+			if(!mfile)
+			{
+				fprintf(output, "cssi: Error: Failed to alloc mem for input file.\n");
+				perror("malloc/realloc");
+				if(daemon)
+					printf("ERR:EMEM\n");
+				return(1);
+			}
 			mfile[nlines-1]=fgetl(fp);
+			if(!mfile[nlines-1])
+			{
+				fprintf(output, "cssi: Error: Failed to alloc mem for input file.\n");
+				perror("malloc/realloc");
+				if(daemon)
+					printf("ERR:EMEM\n");
+				return(1);
+			}
 		}
 		fclose(fp);
 		while(mfile[nlines-1][0]==0)
 		{
 			nlines--;
+			free(mfile[nlines]);
 		}
 		
 		fprintf(output, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
@@ -258,7 +275,8 @@ int main(int argc, char *argv[])
 		int ostate=0; // for parentheticals, e.g. comments.  Doesn't handle nesting - we'd need a stack for that - but comments can't be nested anyway
 		int line=0;
 		int pos=0;
-		bool whitespace[]={true, true, false}; // eat up whitespace?
+		int brace=0;
+		bool whitespace[]={true, true, false, true, true}; // eat up whitespace?
 		bool nonl=false;
 		const entry eblank={0, NULL, NULL, -1, -1, 0};
 		entry current=eblank;
@@ -268,7 +286,7 @@ int main(int argc, char *argv[])
 		{
 			char *curr=mfile[line]+pos;
 			if(trace)
-				fprintf(output, "%d\t%d:%d\t%c\n", state, line+1, pos+1, *curr);
+				fprintf(output, "%d\t%d:%d\t%hhu\t'%c'\n", state, line+1, pos+1, *curr, *curr);
 			if(*curr==0)
 			{
 				if(line==nlines-1)
@@ -284,7 +302,7 @@ int main(int argc, char *argv[])
 					return(2);
 				}
 			}
-			else if((*curr=='/') && (*(curr+1)=='*')) // /* comment */
+			else if((*curr=='/') && (*(curr+1)=='*') && (state!=1)) // /* comment */
 			{
 				ostate=state;
 				state=1;
@@ -295,10 +313,13 @@ int main(int argc, char *argv[])
 				if((state==0)&&curstring)
 				{
 					curstrlen++;
-					curstring=(char *)realloc(curstring, curstrlen);
+					curstring=(char *)realloc(curstring, curstrlen+1);
 					curstring[curstrlen-1]=*curr;
+					curstring[curstrlen]=0;
 				}
+				//fprintf(stderr, "free(%p)\n", mfile[line]);
 				free(mfile[line]);
+				//fprintf(stderr, "free()d ok\n");
 				line++;
 				pos=0;
 				nonl=false;
@@ -367,8 +388,13 @@ int main(int argc, char *argv[])
 								pos=(endurl-mfile[line])+1;
 								nfiles++;
 								filename=(char **)realloc(filename, nfiles*sizeof(char *));
-								filename[nfiles-1]=(char *)malloc(strlen(importpath)+strlen(url));
+								filename[nfiles-1]=(char *)malloc(strlen(importpath)+strlen(url)+1);
 								sprintf(filename[nfiles-1], "%s%s", importpath, url);
+							}
+							else if(strncmp(curr, "@media", strlen("@media"))==0)
+							{
+								pos+=strlen("@media");
+								state=3; // ignore @media, just find the block close
 							}
 							else
 							{
@@ -381,8 +407,11 @@ int main(int argc, char *argv[])
 						}
 						else
 						{
-							current.line=line;
-							current.file=i;
+							if(current.line==-1)
+							{
+								current.line=line;
+								current.file=i;
+							}
 							if(*curr==',')
 							{
 								if(curstring)
@@ -419,6 +448,7 @@ int main(int argc, char *argv[])
 								curstring=NULL; // disconnect the pointer as its target is finished
 								curstrlen=0;
 								state=2;
+								brace=1;
 								pos++;
 							}
 							else
@@ -441,21 +471,29 @@ int main(int argc, char *argv[])
 							pos++;
 					break;
 					case 2: // 'innercode \}
-						if(*curr=='}')
+						if(*curr=='{')
 						{
-							current.innercode=curstring;
-							curstring=NULL; // disconnect the pointer as its target is finished
-							curstrlen=0;
-							current.numlines=line-current.line;
-							nentries++;
-							entries=(entry *)realloc(entries, nentries*sizeof(entry));
-							entries[nentries-1]=current;
-							current=eblank;
-							pos++;
-							state=0;
-							nonl=true;
+							brace++;
 						}
-						else
+						else if(*curr=='}')
+						{
+							brace--;
+							if(brace==0)
+							{
+								current.innercode=curstring;
+								curstring=NULL; // disconnect the pointer as its target is finished
+								curstrlen=0;
+								current.numlines=line-current.line;
+								nentries++;
+								entries=(entry *)realloc(entries, nentries*sizeof(entry));
+								entries[nentries-1]=current;
+								current=eblank;
+								pos++;
+								state=0;
+								nonl=true;
+							}
+						}
+						if(state==2) // not closed the last brace yet, so keep adding to the string
 						{
 							curstrlen++;
 							curstring=(char *)realloc(curstring, curstrlen+1);
@@ -463,6 +501,7 @@ int main(int argc, char *argv[])
 							curstring[curstrlen]=0;
 							if(*curr=='\n')
 							{
+								free(mfile[line]);
 								line++;
 								pos=0;
 							}
@@ -471,6 +510,31 @@ int main(int argc, char *argv[])
 								pos++;
 							}
 						}
+					break;
+					case 3:
+						if(*curr==';')
+						{
+							state=0;
+						}
+						else if(*curr=='{')
+						{
+							state=4;
+							brace=1;
+						}
+						pos++;
+					break;
+					case 4:
+						if(*curr=='{')
+						{
+							brace++;
+						}
+						else if(*curr=='}')
+						{
+							brace--;
+							if(brace==0)
+								state=0;
+						}
+						pos++;
 					break;
 					default:
 						fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
@@ -515,18 +579,26 @@ int main(int argc, char *argv[])
 			while(strlen(txt) && (txt[strlen(txt)-1]==' ')) // strip trailing whitespace
 				txt[strlen(txt)-1]=0;
 			sels[nsels-1].ent=i;
-			int e;
-			if((e=parse_selector(sels[nsels-1], nsels-1))) // assigns & tests NZ
-			{
-				return(3);
-			}
+			sels[nsels-1].chain=NULL;
 		}
 	}
 	selector * sort=selmergesort(sels, nsels);
 	
+	int nerrs=0;
+	for(i=0;i<nsels;i++)
+	{
+		int e;
+		if((e=parse_selector(sort[i], i))) // assigns & tests NZ
+		{
+			nerrs++;
+		}
+	}
+	
 	fprintf(output, "cssi: collated & parsed selectors\n");
+	if(nerrs)
+		fprintf(output, "cssi:  there were %d errors.\n", nerrs);
 	if(daemon)
-		printf("COLL*\n");
+		printf("COLL*:%d\n", nerrs);
 	
 	int errupt=0;
 	while(!errupt)
@@ -556,7 +628,7 @@ int main(int argc, char *argv[])
 				if(daemon)
 					printf("RECORD:ID=\"%d\":FILE=\"%s\":LINE=\"%d\":SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 				else
-					fprintf(output, "In %s at %d:\t%s\n", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+					fprintf(output, "%d\tIn %s at %d:\t%s\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 			}
 			if(daemon)
 				printf(".\n");
@@ -767,7 +839,7 @@ int parse_selector(selector s, int sid)
 					state=2;
 					pos++;
 				}
-				else if(*curr==' ')
+				else if(strchr(" \t\n\r\f", *curr)) // whitespace (though \n should /not/ happen)
 				{
 					if(!igwhite)
 						nextrel=DESC;
@@ -800,8 +872,9 @@ int parse_selector(selector s, int sid)
 				}
 				else
 				{
-					cstr=(char *)realloc(cstr, ++cstl);
+					cstr=(char *)realloc(cstr, ++cstl+1);
 					cstr[cstl-1]=*curr;
+					cstr[cstl]=0;
 					pos++;
 				}
 			break;
