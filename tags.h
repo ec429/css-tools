@@ -6,6 +6,7 @@
 	tags.h - list of recognised HTML tags
 */
 
+// TODO: make this into a radix tree for faster searching
 char *tags[]=
 {
 	"abbr",

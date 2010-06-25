@@ -733,6 +733,7 @@ int parse_selector(selector s, int sid)
 	family nextrel=SELF;
 	sel_elt * node=s.chain;
 	seltype type=NONE;
+	bool igwhite=false;
 	while(*(curr=s.text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
 	{
 		switch(state)
@@ -743,6 +744,13 @@ int parse_selector(selector s, int sid)
 					pos++;
 					state=1;
 					type=CLASS;
+					cstr=NULL;cstl=0;
+				}
+				else if(*curr==':')
+				{
+					pos++;
+					state=1;
+					type=PCLASS;
 					cstr=NULL;cstl=0;
 				}
 				else if(*curr=='#')
@@ -759,16 +767,29 @@ int parse_selector(selector s, int sid)
 					state=2;
 					pos++;
 				}
+				else if(*curr==' ')
+				{
+					if(!igwhite)
+						nextrel=DESC;
+					pos++;
+				}
+				else if(*curr=='>')
+				{
+					nextrel=CHLD;
+					pos++;
+					igwhite=true; // ' > ' is like '>', not ' '.
+				}
 				else
 				{
 					type=NONE; // don't know - it might be a tag but we can't check till we've read the whole string
 					state=1;
-					pos++;
 				}
 			break;
 			case 1: // read a string until the next identifier-delimiter
-				if(strchr(":.#[ ", *curr)) // is *curr one of ':', '.', '#', '[', ' ', '\0'?
+				if(strchr(":.#[ ", *curr) || !*curr) // is *curr one of ':', '.', '#', '[', ' ', '\0'?
 				{
+					cstr=(char *)realloc(cstr, ++cstl);
+					cstr[cstl-1]=0;
 					state=2;
 				}
 				else
@@ -781,12 +802,33 @@ int parse_selector(selector s, int sid)
 			case 2: // have read name
 				if(type==NONE)
 				{
-					fprintf(output, SPARSERR"\tUnrecognised identifier\n", SPARSARG);
-					fprintf(output, SPMKLINE);
-					if(daemon)
-						printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
-					tree_free(s.chain);
-					return(1);
+					if(!(cstr && cstr[0]))
+					{
+						fprintf(output, SPARSERR"\tEmpty selent\n", SPARSARG);
+						fprintf(output, SPMKLINE);
+						if(daemon)
+							printf(DSPARSERR"empty selent\n", DSPARSARG);
+						tree_free(s.chain);
+						return(1);
+					}
+					int i;
+					for(i=0;i<ntags;i++)
+					{
+						if(strcmp(cstr, tags[i])==0)
+						{
+							type=TAG;
+							break;
+						}
+					}
+					if(type==NONE)
+					{
+						fprintf(output, SPARSERR"\tUnrecognised identifier '%s'\n", SPARSARG, cstr);
+						fprintf(output, SPMKLINE);
+						if(daemon)
+							printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
+						tree_free(s.chain);
+						return(1);
+					}
 				}
 				if(!node)
 				{
@@ -801,6 +843,7 @@ int parse_selector(selector s, int sid)
 				node->data=cstr;
 				cstr=NULL;cstl=0; // disconnect the pointer
 				state=0; // return to reading-state
+				igwhite=false;
 			break;
 			default:
 				fprintf(output, SPARSERR"\tNo such state!\n", SPARSARG);
