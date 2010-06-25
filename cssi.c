@@ -26,7 +26,7 @@
 //#include "tags.h" // not currently used
 
 // Interface strings and arguments for [f]printf()
-#define USAGE_STRING	"Usage: cssi [-d][-t] [-I=<importpath>] [-W[no-]newline] <filename> [...]"
+#define USAGE_STRING	"Usage: cssi [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]"
 
 #define PARSERR		"cssi: Error (Parser, state %d) at %d:%d\n"
 #define PARSARG		state, line+1, pos+1
@@ -42,6 +42,20 @@
 
 #define PMKLINE		"%.*s/* <- */%s\n", pos+1, mfile[line], mfile[line]+pos+1
 
+#define SPARSERR		"cssi: Error (Sel-Parser, state %d) SelId %d, col %d\n"
+#define SPARSARG		state, sid, pos+1
+
+#define SPARSEWARN	"cssi: warning: (Sel-Parser, state %d) SelId %d, col %d\n"
+#define SPARSEWARG	state, sid, pos+1
+
+#define DSPARSERR	"ERR:ESPARSE:%d,%d.%d:"
+#define DSPARSARG	state, sid, pos /* note, this is 0-based */
+
+#define DSPARSEWARN	"WARN:WSPARSE:%d,%d.%d:"
+#define DSPARSEWARG	state, sid, pos /* note, this is 0-based */
+
+#define SPMKLINE		"%.*s/* <- */%s\n", pos+1, s.text, s.text+pos+1
+
 // structs for representing CSS things
 
 typedef struct
@@ -55,9 +69,39 @@ typedef struct
 }
 entry;
 
+typedef enum
+{
+	DESC,	// Descendant ("E F")
+	CHLD,	// Child ("E > F")
+	SBLG,	// Sibling ("E + F")
+	SELF	// own properties, like "E.f", "E:f" etc.
+}
+family;
+
+typedef enum
+{
+	UNIV,
+	TAG,
+	CLASS,
+	PCLASS,
+	ID,
+	ATTR
+}
+seltype;
+
+typedef struct _sel_elt
+{
+	seltype type;
+	char * data; // eg "#foo" becomes type=ID, data="foo"; "[bar]" becomes type=ATTR, data="bar".
+	family nextrel;
+	struct _sel_elt * next; // linked-list
+}
+sel_elt;
+
 typedef struct
 {
 	char * text; // we aren't parsing this yet
+	sel_elt * chain; // but when we do it'll go here
 	int ent; // index into entries table
 }
 selector;
@@ -66,20 +110,25 @@ selector;
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
 char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
 selector * mergesort(selector * array, int len);
+int parse_selector(selector, int);
+void tree_free(sel_elt * node);
+
+// global vars
+FILE *output;
+bool daemon=false; // are we talking to another process? -d to set
 
 int main(int argc, char *argv[])
 {
 	/*unsigned char version_maj, version_min, version_rev;
 	sscanf(VERSION, "%hhu.%hhu.%hhu", &version_maj, &version_min, &version_rev);*/
+	output=stdout;
 	int nfiles=0;
 	char ** filename=NULL; // files to load
 	char *importpath="";
-	bool daemon=false; // are we talking to another process?
 	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
 	bool wdupfile=true;
 	int maxwarnings=10;
-	FILE *output=stdout;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
@@ -448,9 +497,9 @@ int main(int argc, char *argv[])
 			printf("XSWARN:%d\n", nwarnings-maxwarnings);
 	}
 	
-	fprintf(output, "cssi: collating selectors\n");
+	fprintf(output, "cssi: collating & parsing selectors\n");
 	if(daemon)
-		printf("COLL\n");
+		printf("COLL:\n");
 	int nsels=0;
 	selector * sels=NULL;
 	for(i=0;i<nentries;i++)
@@ -465,9 +514,18 @@ int main(int argc, char *argv[])
 			while(strlen(txt) && (txt[strlen(txt)-1]==' ')) // strip trailing whitespace
 				txt[strlen(txt)-1]=0;
 			sels[nsels-1].ent=i;
+			int e;
+			if((e=parse_selector(sels[nsels-1], nsels-1))) // assigns & tests NZ
+			{
+				return(3);
+			}
 		}
 	}
 	selector * sort=mergesort(sels, nsels);
+	
+	fprintf(output, "cssi: collated & parsed selectors\n");
+	if(daemon)
+		printf("COLL*\n");
 	
 	int errupt=0;
 	while(!errupt)
@@ -659,5 +717,97 @@ selector * mergesort(selector * array, int len)
 			free(right);
 			return(rv);
 		break;
+	}
+}
+
+int parse_selector(selector s, int sid)
+{
+	s.chain=NULL; // initially empty
+	// state machine
+	int state=0;
+	int pos=0;
+	char *curr;
+	char *cstr=NULL;
+	int cstl=0;
+	family nextrel=SELF;
+	sel_elt * node=s.chain;
+	seltype type=UNIV;
+	while(*(curr=s.text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
+	{
+		switch(state)
+		{
+			case 0: // get an identifier
+				if(*curr=='.')
+				{
+					pos++;
+					state=1;
+					type=CLASS;
+					cstr=NULL;cstl=0;
+				}
+				else if(*curr=='#')
+				{
+					pos++;
+					state=1;
+					type=ID;
+					cstr=NULL;cstl=0;
+				}
+				else
+				{
+					fprintf(output, SPARSERR"\tUnrecognised identifier\n", SPARSARG);
+					fprintf(output, SPMKLINE);
+					if(daemon)
+						printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
+					tree_free(s.chain);
+					return(1);
+				}
+			break;
+			case 1: // read a string until the next identifier-delimiter
+				if(strchr(":.#[ ", *curr)) // is *curr one of ':', '.', '#', '[', ' ', '\0'?
+				{
+					state=2;
+				}
+				else
+				{
+					cstr=(char *)realloc(cstr, ++cstl);
+					cstr[cstl-1]=*curr;
+					pos++;
+				}
+			break;
+			case 2: // have read .class-name
+				if(!node)
+				{
+					node=(sel_elt *)malloc(sizeof(sel_elt));
+				}
+				else
+				{
+					node->nextrel=nextrel;nextrel=SELF;
+					node=node->next=(sel_elt *)malloc(sizeof(sel_elt));
+				}
+				node->type=type;
+				node->data=cstr;
+				cstr=NULL;cstl=0; // disconnect the pointer
+				state=0; // return to reading-state
+			break;
+			default:
+				fprintf(output, SPARSERR"\tNo such state!\n", SPARSARG);
+				fprintf(output, SPMKLINE);
+				if(daemon)
+					printf(DSPARSERR"no such state\n", DSPARSARG);
+				tree_free(s.chain);
+				return(1);
+			break;
+		}
+	}
+	return(0);
+}
+
+void tree_free(sel_elt * node)
+{
+	if(node)
+	{
+		tree_free(node->next);
+		if(node->data)
+			free(node->data);
+		free(node);
 	}
 }
