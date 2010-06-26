@@ -20,7 +20,7 @@ Options:
 	-Wno-<warning>	Disable the specified warning
 	-I=<importpath>	Sets the path to use for @import at-rules (default is the current directory)
 A filename of - (dash) will cause cssi to read from stdin.
-An <importpath> (-I) will only affect files that come /after/ it on the command line.  @imported files will inherit the importpath of the (first) file which imported them.
+An <importpath> (-I) will only affect files that come /after/ it on the command line.  @imported files will inherit the importpath of the (first) file which imported them.  If the path given does not end in a slash '/', one will be appended.
 Warnings:
 	-Wnewline		Missing newline; two rules on the same line.  Default TRUE
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
@@ -53,15 +53,20 @@ Sample usage of cssi:
 		cssi: parsed sub.css
 		cssi: warning: Duplicate file in set (from @import): sub.css
 		cssi: Parsing completed
-		cssi: collating selectors
-		cssi>sel
-		Listing SELECTORS
-		In sub.css at 71:       #access
-		In sub.css at 73:       #access h3
-		In sub.css at 346:      #adduser
-	<snip />
-		In sub.css at 432:      textarea
-		In test.css at 49:      ul
+		cssi: collating & parsing selectors
+		cssi: collated & parsed selectors
+		cssi>sel dup=1 rows=10
+		cssi: matching SELECTORS
+		3* In test.css at 67:   a:hover
+		4* In sub.css at 9:     a:hover
+		11*     In test.css at 222:     img
+		12*     In sub.css at 173:      img
+		89*     In test.css at 520:     #articles
+		90*     In sub.css at 141:      #articles
+		92*     In test.css at 734:     #bannerad
+		93*     In sub.css at 17:       #bannerad
+		95*     In test.css at 34:      #bodydiv
+		96*     In sub.css at 23:       #bodydiv
 		cssi>q
 	$
 

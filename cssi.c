@@ -198,6 +198,12 @@ int main(int argc, char *argv[])
 		else if(strncmp(argt, "-I=", 3)==0)
 		{
 			importpath=argt+3;
+			if(importpath[strlen(importpath)-1]!='/')
+			{
+				char *p=(char *)malloc(strlen(importpath)+2);
+				sprintf(p, "%s/", importpath);
+				importpath=p; // technically this leads to a memory leak, since importpath never gets free()d - but since you're not likely to give more than a few -I= options, it shouldn't matter
+			}
 		}
 		else if((strncmp(argt, "-m=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -404,7 +410,7 @@ int main(int argc, char *argv[])
 								pos=(endurl-mfile[line])+1;
 								nfiles++;
 								filename=(char **)realloc(filename, nfiles*sizeof(char *));
-								filename[nfiles-1]=(char *)malloc(strlen(importpath)+strlen(url)+1);
+								filename[nfiles-1]=(char *)malloc(strlen(assoc_ipath[i])+strlen(url)+1);
 								sprintf(filename[nfiles-1], "%s%s", assoc_ipath[i], url);
 								assoc_ipath=(char **)realloc(assoc_ipath, nfiles*sizeof(char *));
 								assoc_ipath[nfiles-1]=assoc_ipath[i];
