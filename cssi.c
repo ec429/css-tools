@@ -119,6 +119,7 @@ selector * selmergesort(selector * array, int len);
 int parse_selector(selector *, int);
 void tree_free(sel_elt * node);
 int treecmp(sel_elt * left, sel_elt * right);
+bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels);
 
 // global vars
 FILE *output;
@@ -660,154 +661,9 @@ int main(int argc, char *argv[])
 			int nrows=0;
 			for(i=0;i<nsels;i++)
 			{
-				bool show=true;
+				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels);
 				int ent=sort[i].ent;
 				int file=entries[ent].file;
-				int parm;
-				for(parm=0;(parm<parmc)&&show;parm++)
-				{
-					char *sparm=strdup(parmv[parm]);
-					char *cmp=sparm;
-					while(*cmp && !strchr("=<>:", *cmp))
-						cmp++;
-					char wcmp=*cmp;
-					*cmp=0;
-					cmp++;
-					bool num=false;
-					bool tree=false;
-					char *smatch=NULL;
-					int nmatch;
-					if(strcmp(sparm, "sid")==0)
-					{
-						num=true;nmatch=i;
-					}
-					else if(strcmp(sparm, "file")==0)
-					{
-						smatch=filename[file];
-					}
-					else if(strcmp(sparm, "line")==0)
-					{
-						num=true;nmatch=entries[ent].line+(daemon?0:1); // daemon mode uses 0-based linenos
-					}
-					else if(strcmp(sparm, "match")==0)
-					{
-						tree=true;
-						smatch=(char *)sort[i].chain; // it's a sel_ent *, really, not a char *
-					}
-					else if(strcmp(sparm, "dup")==0)
-					{
-						num=true;
-						nmatch=sort[i].dup;
-					}
-					else if(strcmp(sparm, "rows")==0)
-					{
-						num=true;
-						nmatch=nrows;
-						wcmp='<';
-					}
-					else
-					{
-						if(daemon)
-							printf("ERR:EBADPARM:BADPARAM:%d:\"%s\"\n", parm, parmv[parm]);
-						else
-							fprintf(output, "cssi: Error: Bad matcher %s (unrecognised param)\n", parmv[parm]);
-						i=nsels;show=false;break;
-					}
-					int inval=0;
-					if(num)
-					{
-						sscanf(cmp, "%d", &inval);
-					}
-					switch(wcmp)
-					{
-						case '=':
-							if(tree)
-							{
-								if(daemon)
-									printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-							else if(num)
-							{
-								show&=(nmatch == inval);
-							}
-							else
-							{
-								show&=(strcmp(smatch, cmp)==0);
-							}
-						break;
-						case '<':
-							if(num)
-							{
-								show&=(nmatch < inval);
-							}
-							else
-							{
-								if(daemon)
-									printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: '<' is for numerics only (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-						break;
-						case '>':
-							if(num)
-							{
-								show&=(nmatch > inval);
-							}
-							else
-							{
-								if(daemon)
-									printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: '>' is for numerics only (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-						break;
-						case ':':
-							if(num||tree)
-							{
-								if(daemon)
-									printf("ERR:EBADPARM:STRCOMP:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: ':' is for strings only (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-							else
-							{
-								if(daemon)
-									printf("ERR:ENOSYS:REGEXMATCH:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: regex-matching unimplemented (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-						break;
-						case 0:
-							if(num)
-								show=(nmatch!=0);
-							else if(tree)
-							{
-								if(daemon)
-									printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
-								else
-									fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-								i=nsels;show=false;break;
-							}
-							else
-								show=smatch?smatch[0]:0;
-						break;
-						default: // this should be impossible
-							if(daemon)
-								printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
-							else
-								fprintf(output, "cssi: Error: Bad matcher %s (bad comparator)\n", parmv[parm]);
-							i=nsels;show=false;break;
-						break;
-					}
-					free(sparm);
-				}
 				if(show)
 				{
 					nrows++;
@@ -1180,4 +1036,157 @@ int treecmp(sel_elt * left, sel_elt * right)
 	if(right)
 		return(-1);
 	return(0);
+}
+
+bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels)
+{
+	bool show=true;
+	int ent=sort[i].ent;
+	int file=entries[ent].file;
+	int parm;
+	for(parm=0;(parm<parmc)&&show;parm++)
+	{
+		char *sparm=strdup(parmv[parm]);
+		char *cmp=sparm;
+		while(*cmp && !strchr("=<>:", *cmp))
+			cmp++;
+		char wcmp=*cmp;
+		*cmp=0;
+		cmp++;
+		bool num=false;
+		bool tree=false;
+		char *smatch=NULL;
+		int nmatch;
+		if(strcmp(sparm, "sid")==0)
+		{
+			num=true;nmatch=i;
+		}
+		else if(strcmp(sparm, "file")==0)
+		{
+			smatch=filename[file];
+		}
+		else if(strcmp(sparm, "line")==0)
+		{
+			num=true;nmatch=entries[ent].line+(daemon?0:1); // daemon mode uses 0-based linenos
+		}
+		else if(strcmp(sparm, "match")==0)
+		{
+			tree=true;
+			smatch=(char *)sort[i].chain; // it's a sel_ent *, really, not a char *
+		}
+		else if(strcmp(sparm, "dup")==0)
+		{
+			num=true;
+			nmatch=sort[i].dup;
+		}
+		else if(strcmp(sparm, "rows")==0)
+		{
+			num=true;
+			nmatch=nrows;
+			wcmp='<';
+		}
+		else
+		{
+			if(daemon)
+				printf("ERR:EBADPARM:BADPARAM:%d:\"%s\"\n", parm, parmv[parm]);
+			else
+				fprintf(output, "cssi: Error: Bad matcher %s (unrecognised param)\n", parmv[parm]);
+			free(sparm); return(false);
+		}
+		int inval=0;
+		if(num)
+		{
+			sscanf(cmp, "%d", &inval);
+		}
+		switch(wcmp)
+		{
+			case '=':
+				if(tree)
+				{
+					if(daemon)
+						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
+					free(sparm); return(false);
+				}
+				else if(num)
+				{
+					show&=(nmatch == inval);
+				}
+				else
+				{
+					show&=(strcmp(smatch, cmp)==0);
+				}
+			break;
+			case '<':
+				if(num)
+				{
+					show&=(nmatch < inval);
+				}
+				else
+				{
+					if(daemon)
+						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: '<' is for numerics only (%s)\n", parmv[parm]);
+					free(sparm); return(false);
+				}
+			break;
+			case '>':
+				if(num)
+				{
+					show&=(nmatch > inval);
+				}
+				else
+				{
+					if(daemon)
+						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: '>' is for numerics only (%s)\n", parmv[parm]);
+					free(sparm); return(false);
+				}
+			break;
+			case ':':
+				if(num||tree)
+				{
+					if(daemon)
+						printf("ERR:EBADPARM:STRCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: ':' is for strings only (%s)\n", parmv[parm]);
+					i=nsels;show=false;break;
+				}
+				else
+				{
+					if(daemon)
+						printf("ERR:ENOSYS:REGEXMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: regex-matching unimplemented (%s)\n", parmv[parm]);
+					free(sparm); return(false);
+				}
+			break;
+			case 0:
+				if(num)
+					show=(nmatch!=0);
+				else if(tree)
+				{
+					if(daemon)
+						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+					else
+						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
+					free(sparm); return(false);
+				}
+				else
+					show=smatch?smatch[0]:0;
+			break;
+			default: // this should be impossible
+				if(daemon)
+					printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
+				else
+					fprintf(output, "cssi: Error: Bad matcher %s (bad comparator)\n", parmv[parm]);
+				free(sparm); return(false);
+			break;
+		}
+		free(sparm);
+	}
+	return(show);
 }
