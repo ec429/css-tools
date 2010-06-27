@@ -108,7 +108,7 @@ typedef struct
 	char * text; // when we parse this
 	sel_elt * chain; // it goes here
 	int ent; // index into entries table
-	bool dup; // does it have a duplicate anywhere else in the table?
+	int dup; // 0=no duplicates, 1=first instance & has duplicates, 2=second, etc.
 }
 selector;
 
@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
 			trace=true;
 			fprintf(output, "cssi: Tracing on stderr\n");
 		}
-		else if(strcmp(argt, "-Wall")==0)
+		else if(strcmp(argt, "-Wall")==0) // TODO:generically handle warnings, so I don't have to remember to add each new warning to -Wall and -Wno-all
 		{
 			wnewline=true;
 			wdupfile=true;
@@ -604,7 +604,7 @@ int main(int argc, char *argv[])
 				txt[strlen(txt)-1]=0;
 			sels[nsels-1].ent=i;
 			sels[nsels-1].chain=NULL;
-			sels[nsels-1].dup=false;
+			sels[nsels-1].dup=0;
 		}
 	}
 	
@@ -619,13 +619,16 @@ int main(int argc, char *argv[])
 	}
 	
 	selector * sort=selmergesort(sels, nsels);
+	int ndup=1;
 	for(i=0;i<nsels-1;i++)
 	{
 		if(treecmp(sort[i].chain, sort[i+1].chain)==0)
 		{
-			sort[i].dup=true;
-			sort[i+1].dup=true;
+			sort[i].dup=ndup++;
+			sort[i+1].dup=ndup;
 		}
+		else
+			ndup=1;
 	}
 	
 	fprintf(output, "cssi: collated & parsed selectors\n");
@@ -667,14 +670,6 @@ int main(int argc, char *argv[])
 					char *cmp=sparm;
 					while(*cmp && !strchr("=<>:", *cmp))
 						cmp++;
-					if(!*cmp)
-					{
-						if(daemon)
-							printf("ERR:EBADPARM:NOCOMP:%d:\"%s\"\n", parm, parmv[parm]);
-						else
-							fprintf(output, "cssi: Error: Bad matcher %s (no comparator found)\n", parmv[parm]);
-						i=nsels;show=false;break;
-					}
 					char wcmp=*cmp;
 					*cmp=0;
 					cmp++;
@@ -702,7 +697,7 @@ int main(int argc, char *argv[])
 					else if(strcmp(sparm, "dup")==0)
 					{
 						num=true;
-						nmatch=sort[i].dup?1:0;
+						nmatch=sort[i].dup;
 					}
 					else if(strcmp(sparm, "rows")==0)
 					{
@@ -789,6 +784,20 @@ int main(int argc, char *argv[])
 								i=nsels;show=false;break;
 							}
 						break;
+						case 0:
+							if(num)
+								show=(nmatch!=0);
+							else if(tree)
+							{
+								if(daemon)
+									printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
+								else
+									fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
+								i=nsels;show=false;break;
+							}
+							else
+								show=smatch?smatch[0]:0;
+						break;
 						default: // this should be impossible
 							if(daemon)
 								printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
@@ -803,9 +812,9 @@ int main(int argc, char *argv[])
 				{
 					nrows++;
 					if(daemon)
-						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup?1:0, sort[i].text);
+						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
 					else
-						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?"*":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup>1?"+":"*":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 				}
 			}
 			if(daemon)

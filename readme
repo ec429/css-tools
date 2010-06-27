@@ -26,19 +26,20 @@ Warnings:
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
 	-Watrule		At-rule positioning; an at-rule appears somewhere other than the start of a line, or is inside a selector.  Default TRUE
 Commands for the cssi shell:
-	selector <param><comparator><match> [...]
+	selector <param>[<comparator><match>] [...]
 		Lists selectors matching the specified params.
 		Valid <param>s:
 			sid		the SelId of the selector
 			file	the path/name of the file in which the selector appears
 			line	the line-number of the statement containing the selector
 			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'
-			dup		1 if the selector has duplicates, 0 otherwise
+			dup		NZ if the selector has duplicates, 0 otherwise
 			rows	max number of rows to show.  Effectively, row-number<value, where row-number is incremented each time a row is shown
 		Valid <comparator>s:
 			=		equality
 			<, >	gt/lt for numerics
 			:		satisfies regex
+			no comparator: test nonzero
 		Param matches are ANDed together
 	quit
 		Quits cssi
@@ -55,18 +56,18 @@ Sample usage of cssi:
 		cssi: Parsing completed
 		cssi: collating & parsing selectors
 		cssi: collated & parsed selectors
-		cssi>sel dup=1 rows=10
+		cssi>sel dup rows=10
 		cssi: matching SELECTORS
 		3* In test.css at 67:   a:hover
-		4* In sub.css at 9:     a:hover
+		4+ In sub.css at 9:     a:hover
 		11*     In test.css at 222:     img
-		12*     In sub.css at 173:      img
+		12+     In sub.css at 173:      img
 		89*     In test.css at 520:     #articles
-		90*     In sub.css at 141:      #articles
+		90+     In sub.css at 141:      #articles
 		92*     In test.css at 734:     #bannerad
-		93*     In sub.css at 17:       #bannerad
+		93+     In sub.css at 17:       #bannerad
 		95*     In test.css at 34:      #bodydiv
-		96*     In sub.css at 23:       #bodydiv
+		96+     In sub.css at 23:       #bodydiv
 		cssi>q
 	$
 
