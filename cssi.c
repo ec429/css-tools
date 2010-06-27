@@ -657,7 +657,7 @@ int main(int argc, char *argv[])
 			if(daemon)
 				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 			else
-				fprintf(output, "cssi: matching SELECTORS\n");
+				fprintf(output, "cssi: listing SELECTORS\n");
 			int nrows=0;
 			for(i=0;i<nsels;i++)
 			{
@@ -671,6 +671,29 @@ int main(int argc, char *argv[])
 						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
 					else
 						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup>1?"+":"*":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+				}
+			}
+			if(daemon)
+				printf(".\n");
+		}
+		else if(strncmp(cmd, "declaration", strlen(cmd))==0) // contents of a sel's {}
+		{
+			if(daemon)
+				printf("DECL...\n"); // line ending with '...' indicates "continue until a line is '.'"
+			else
+				fprintf(output, "cssi: listing DECLARATIONS\n");
+			int nrows=0;
+			for(i=0;i<nsels;i++)
+			{
+				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels);
+				int ent=sort[i].ent;
+				if(show)
+				{
+					nrows++;
+					if(daemon)
+						printf("RECORD:ID=%d:DECL=\"%s\"\n", i, entries[ent].innercode);
+					else
+						fprintf(output, "%d\t{%s}\n", i, entries[ent].innercode);
 				}
 			}
 			if(daemon)

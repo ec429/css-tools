@@ -41,6 +41,9 @@ Commands for the cssi shell:
 			:		satisfies regex
 			no comparator: test nonzero
 		Param matches are ANDed together
+	declaration <param>[<comparator><match>] [...]
+		Lists the inner code (what's between the braces) of the selectors matching the specified params.
+		Valid params etc. are as for selector
 	quit
 		Quits cssi
 You only need to use enough characters of the command name to match it unambiguously.  The same does *not* apply to arguments, which must be given in full.
