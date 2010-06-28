@@ -109,6 +109,7 @@ typedef struct
 	sel_elt * chain; // it goes here
 	int ent; // index into entries table
 	int dup; // 0=no duplicates, 1=first instance & has duplicates, 2=second, etc.
+	bool lmatch; // was it matched by the last test() run?
 }
 selector;
 
@@ -119,7 +120,7 @@ selector * selmergesort(selector * array, int len);
 int parse_selector(selector *, int);
 void tree_free(sel_elt * node);
 int treecmp(sel_elt * left, sel_elt * right);
-bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels);
+bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err);
 
 // global vars
 FILE *output;
@@ -646,6 +647,7 @@ int main(int argc, char *argv[])
 		int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
 		char ** parmv=NULL;
 		char *p;
+		bool err=false;
 		while((p=strtok(NULL, " ")))
 		{
 			parmc++;
@@ -661,7 +663,8 @@ int main(int argc, char *argv[])
 			int nrows=0;
 			for(i=0;i<nsels;i++)
 			{
-				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels);
+				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
+				if(err) break;
 				int ent=sort[i].ent;
 				int file=entries[ent].file;
 				if(show)
@@ -685,7 +688,8 @@ int main(int argc, char *argv[])
 			int nrows=0;
 			for(i=0;i<nsels;i++)
 			{
-				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels);
+				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
+				if(err) break;
 				int ent=sort[i].ent;
 				if(show)
 				{
@@ -1061,9 +1065,11 @@ int treecmp(sel_elt * left, sel_elt * right)
 	return(0);
 }
 
-bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels)
+bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err)
 {
-	bool show=true;
+	bool show=true;*err=false;
+	bool lmatch=sort[i].lmatch;
+	sort[i].lmatch=false;
 	int ent=sort[i].ent;
 	int file=entries[ent].file;
 	int parm;
@@ -1076,6 +1082,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 		char wcmp=*cmp;
 		*cmp=0;
 		cmp++;
+		bool eq=false;
 		bool num=false;
 		bool tree=false;
 		char *smatch=NULL;
@@ -1102,6 +1109,11 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			num=true;
 			nmatch=sort[i].dup;
 		}
+		else if(strcmp(sparm, "last")==0)
+		{
+			num=true;
+			nmatch=lmatch;
+		}
 		else if(strcmp(sparm, "rows")==0)
 		{
 			num=true;
@@ -1114,7 +1126,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				printf("ERR:EBADPARM:BADPARAM:%d:\"%s\"\n", parm, parmv[parm]);
 			else
 				fprintf(output, "cssi: Error: Bad matcher %s (unrecognised param)\n", parmv[parm]);
-			free(sparm); return(false);
+			free(sparm);*err=true;return(false);
 		}
 		int inval=0;
 		if(num)
@@ -1130,7 +1142,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-					free(sparm); return(false);
+					free(sparm);*err=true;return(false);
 				}
 				else if(num)
 				{
@@ -1142,9 +1154,13 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 			break;
 			case '<':
+				if(*cmp=='=')
+				{
+					eq=true;cmp++;sscanf(cmp, "%d", &inval);
+				}
 				if(num)
 				{
-					show&=(nmatch < inval);
+					show&=eq?(nmatch <= inval):(nmatch < inval);
 				}
 				else
 				{
@@ -1152,13 +1168,17 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: '<' is for numerics only (%s)\n", parmv[parm]);
-					free(sparm); return(false);
+					free(sparm);*err=true;return(false);
 				}
 			break;
 			case '>':
+				if(*cmp=='=')
+				{
+					eq=true;cmp++;sscanf(cmp, "%d", &inval);
+				}
 				if(num)
 				{
-					show&=(nmatch > inval);
+					show&=eq?(nmatch >= inval):(nmatch > inval);
 				}
 				else
 				{
@@ -1166,7 +1186,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: '>' is for numerics only (%s)\n", parmv[parm]);
-					free(sparm); return(false);
+					free(sparm);*err=true;return(false);
 				}
 			break;
 			case ':':
@@ -1176,7 +1196,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:EBADPARM:STRCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: ':' is for strings only (%s)\n", parmv[parm]);
-					i=nsels;show=false;break;
+					free(sparm);*err=true;return(false);
 				}
 				else
 				{
@@ -1184,7 +1204,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:ENOSYS:REGEXMATCH:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: regex-matching unimplemented (%s)\n", parmv[parm]);
-					free(sparm); return(false);
+					free(sparm);*err=true;return(false);
 				}
 			break;
 			case 0:
@@ -1196,7 +1216,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-					free(sparm); return(false);
+					free(sparm);*err=true;return(false);
 				}
 				else
 					show=smatch?smatch[0]:0;
@@ -1206,10 +1226,11 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 				else
 					fprintf(output, "cssi: Error: Bad matcher %s (bad comparator)\n", parmv[parm]);
-				free(sparm); return(false);
+				free(sparm);*err=true;return(false);
 			break;
 		}
 		free(sparm);
 	}
+	sort[i].lmatch=show;
 	return(show);
 }

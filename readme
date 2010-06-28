@@ -34,10 +34,12 @@ Commands for the cssi shell:
 			line	the line-number of the statement containing the selector
 			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'
 			dup		NZ if the selector has duplicates, 0 otherwise
+			last	boolean - was the selector matched by the last search done?  (ie. search within results)
 			rows	max number of rows to show.  Effectively, row-number<value, where row-number is incremented each time a row is shown
 		Valid <comparator>s:
 			=		equality
 			<, >	gt/lt for numerics
+			<=, >=	ge/le for numerics
 			:		satisfies regex
 			no comparator: test nonzero
 		Param matches are ANDed together
