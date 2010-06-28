@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
 				importpath=p; // technically this leads to a memory leak, since importpath never gets free()d - but since you're not likely to give more than a few -I= options, it shouldn't matter
 			}
 		}
-		else if((strncmp(argt, "-m=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
+		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
 			sscanf(strchr(argt, '=')+1, "%d", &maxwarnings);
 		}
