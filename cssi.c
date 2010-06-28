@@ -108,7 +108,7 @@ typedef struct
 	char * text; // when we parse this
 	sel_elt * chain; // it goes here
 	int ent; // index into entries table
-	int dup; // 0=no duplicates, 1=first instance & has duplicates, 2=second, etc.
+	int dup; // 0=no duplicates, NZ num=first sel of dup block
 	bool lmatch; // was it matched by the last test() run?
 }
 selector;
@@ -621,16 +621,16 @@ int main(int argc, char *argv[])
 	}
 	
 	selector * sort=selmergesort(sels, nsels);
-	int ndup=1;
+	int dup=0;
 	for(i=0;i<nsels-1;i++)
 	{
 		if(treecmp(sort[i].chain, sort[i+1].chain)==0)
 		{
-			sort[i].dup=ndup++;
-			sort[i+1].dup=ndup;
+			sort[i].dup=dup?dup:(dup=i);
+			sort[i+1].dup=dup;
 		}
 		else
-			ndup=1;
+			dup=0;
 	}
 	
 	fprintf(output, "cssi: collated & parsed selectors\n");
@@ -673,7 +673,7 @@ int main(int argc, char *argv[])
 					if(daemon)
 						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
 					else
-						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup>1?"+":"*":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup==i?"*":"+":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 				}
 			}
 			if(daemon)
