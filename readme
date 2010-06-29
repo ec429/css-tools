@@ -32,7 +32,7 @@ Commands for the cssi shell:
 			sid		the SelId of the selector
 			file	the path/name of the file in which the selector appears
 			line	the line-number of the statement containing the selector
-			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'
+			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'.  See section 'Tree-matching' below.
 			dup		NZ if the selector has duplicates, 0 otherwise
 			last	boolean - was the selector matched by the last search done?  (ie. search within results)
 			rows	max number of rows to show.  Effectively, row-number<value, where row-number is incremented each time a row is shown
@@ -76,3 +76,48 @@ Sample usage of cssi:
 		cssi>q
 	$
 
+Tree-matching:
+Case-insensitive.
+Format of a tree-match, in something approximating BNF:
+	<tree-match>	= <html-tag>?<property>*(<relation><tree-match>)?
+	<property>		= {<class>|<pclass>|<id>}
+	<relation>		= {>|+}
+	<html-tag> any of the tags listed in tags.h
+	<class>			= \.<ident>
+	<pclass>		= :<ident>
+	<id>			= #<ident>
+	<ident>			= <nmstart><nmchar>*
+	<nmstart>		= [_a-z]
+	<nmchar>		= [_a-z0-9-]
+Note that this considerably restricts the range of permissible identifiers as compared to the W3C CSS2.1 specification.  In particular, escapes (such as "\00000a") are not supported in css-tools right now.  Then again, it baffles me as to why you'd want to use them.
+Whitespace is disallowed because ' ' delimits command arguments, and it's never needed.  But, you might ask, what about the Descendant syntax?  Well, that's for /selectors/, you can't use it for your tree-match.  After all, if you did, how would cssi know whether your "p a" should match the selector "p>a"?  Of course, "p>a" always matches the selector "p a", but it's not symmetric.
+A <relation> must always be given, partly because trying to match a Descendant entry in a tree against a selector is ambiguous and/or meaningless; partly also to delimit strings as otherwise eg. "div#mydiv" would be ambiguous (is it <div id="mydiv" />, or <div id="my"><div /></div>?).
+How it works: Suppose you have the following HTML tree (truncated):
+	<html>
+		<body>
+			<div id="main">
+				<h1 class="title">
+					My Page
+				</h1>
+				<h2>
+					Table of Contents
+				</h2>
+				<p class="toc">
+					<table>
+						<tr><td class="foo"><a href="#foo">The Koans of Master Foo</a></td></tr>
+						<tr><td class="bar"><a href="#bar">Propping up the Bar</a></td></tr>
+					</table>
+				<h2>
+					The Koans of Master Foo
+				</h2>...
+Now suppose you want to match the link to 'Propping up the Bar' in the table of contents.  There are several ways you could specify it:
+	match=.toc>>>td.bar>a
+	match=.bar>a
+	match=tr+tr>td>a
+	match=html>body>div#main>p.toc>table>tr>td.bar>a
+All of these would, in the above snippet, uniquely specify that link.  The most specific tree-match, however, would be
+	match=html>body:first-child>div#main>h1:first-child.title+h2+p.toc>table:first-child>tr:first-child+tr>td:first-child.bar>a:first-child[href="#bar"]
+(Although, note that this wouldn't work right now as the [attribute] selector is not yet supported.)
+Remember also that you're not actually aiming to uniquely specify an element in your tree, because cssi isn't looking at your tree, but at your CSS.
+So if you just used match=.bar>a, this would also match the CSS selectors "h1 a" and "td>>a", neither of which match that element.  The 'most specific' match above will return /only/ those selectors which match the element - in essence it describes everything CSS 'knows' about the element.
+The matcher is 'optimistic': it returns all the selectors which could conceivably describe the element - it assumes that you have told it the truth but not the whole truth.  The only exception to this is ID selectors; if you don't specify one, it assumes the element has no ID, rather than any ID.  To make the matcher optimistic about IDs, give an ID of "?" (which is not a valid ID in CSS2.1).  So the selector "p#bar" would be matched by "match=p#?" - and even "match=.foo>p#?" - but not "match=p".
