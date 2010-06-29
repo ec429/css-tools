@@ -875,6 +875,7 @@ selector * selmergesort(selector * array, int len)
 
 int parse_selector(selector * s, int sid)
 {
+	// TODO: correctly handle things like ">>".  Perhaps reorganise sel_elt as child(sibling(simpleselector))?
 	s->chain=NULL; // initially empty
 	// state machine
 	int state=0;
@@ -1256,6 +1257,8 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 		{
 			case UNIV:
 				return(tm_next(curr, match));
+			break;
+			case TAG:
 				
 			break;
 			default:
@@ -1278,14 +1281,20 @@ bool tm_next(sel_elt * curr, sel_elt * match)
 {
 	switch(curr->nextrel)
 	{
-		case NONE: // (*, x) -> true
-			return(true);
-		break;
 		case CHLD:
-			if(match)
-				return(tree_match(curr->next, match->next)); // (*>x, y>z) -> (x, z)
+			sel_elt * ns = tm_ns(match); // ns == Not Self
+			if(ns && )
+				return(tree_match(curr->next, ns)); // (*>x, y>z) -> (x, z)
 			else
 				return(false);
+		break;
+		case SELF:
+			if(curr->next)
+				return(tm_next(curr->next, match));
+			else if(match)
+				return(false);
+			else
+				return(true);
 		break;
 		default:
 			if(daemon)
@@ -1294,5 +1303,20 @@ bool tm_next(sel_elt * curr, sel_elt * match)
 				fprintf(output, "cssi: Error: Internal error in tm_next() - bad nextrel %d\n", curr->nextrel);
 			return(false);
 		break;
+	}
+}
+
+sel_elt * tm_ns(sel_elt * match)
+{
+	if(match)
+	{
+		switch(match->nextrel)
+		{
+			case SELF:
+			break;
+			default:
+				return(match->next);
+			break;
+		}
 	}
 }
