@@ -654,70 +654,74 @@ int main(int argc, char *argv[])
 			parmv=(char **)realloc(parmv, parmc*sizeof(char *));
 			parmv[parmc-1]=p;
 		}
-		if(strncmp(cmd, "selector", strlen(cmd))==0) // selectors
+		if(cmd)
 		{
-			if(daemon)
-				printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
-			else
-				fprintf(output, "cssi: listing SELECTORS\n");
-			int nrows=0;
-			for(i=0;i<nsels;i++)
+			if(strncmp(cmd, "selector", strlen(cmd))==0) // selectors
 			{
-				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
-				if(err) break;
-				int ent=sort[i].ent;
-				int file=entries[ent].file;
-				if(show)
+				if(daemon)
+					printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
+				else
+					fprintf(output, "cssi: listing SELECTORS\n");
+				int nrows=0;
+				for(i=0;i<nsels;i++)
 				{
-					nrows++;
-					if(daemon)
-						printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
-					else
-						fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup==i?"*":"+":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+					bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
+					if(err) break;
+					int ent=sort[i].ent;
+					int file=entries[ent].file;
+					if(show)
+					{
+						nrows++;
+						if(daemon)
+							printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
+						else
+							fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup==i?"*":"+":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
+					}
 				}
+				if(daemon)
+					printf(".\n");
 			}
-			if(daemon)
-				printf(".\n");
-		}
-		else if(strncmp(cmd, "declaration", strlen(cmd))==0) // contents of a sel's {}
-		{
-			if(daemon)
-				printf("DECL...\n"); // line ending with '...' indicates "continue until a line is '.'"
-			else
-				fprintf(output, "cssi: listing DECLARATIONS\n");
-			int nrows=0;
-			for(i=0;i<nsels;i++)
+			else if(strncmp(cmd, "declaration", strlen(cmd))==0) // contents of a sel's {}
 			{
-				bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
-				if(err) break;
-				int ent=sort[i].ent;
-				if(show)
+				if(daemon)
+					printf("DECL...\n"); // line ending with '...' indicates "continue until a line is '.'"
+				else
+					fprintf(output, "cssi: listing DECLARATIONS\n");
+				int nrows=0;
+				for(i=0;i<nsels;i++)
 				{
-					nrows++;
-					if(daemon)
-						printf("RECORD:ID=%d:DECL=\"%s\"\n", i, entries[ent].innercode);
-					else
-						fprintf(output, "%d\t{%s}\n", i, entries[ent].innercode);
+					bool show=test(parmc, parmv, sort, i, entries, filename, nrows, nsels, &err);
+					if(err) break;
+					int ent=sort[i].ent;
+					if(show)
+					{
+						nrows++;
+						if(daemon)
+							printf("RECORD:ID=%d:DECL=\"%s\"\n", i, entries[ent].innercode);
+						else
+							fprintf(output, "%d\t{%s}\n", i, entries[ent].innercode);
+					}
 				}
+				if(daemon)
+					printf(".\n");
 			}
-			if(daemon)
-				printf(".\n");
-		}
-		else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
-		{
-			// no params yet
-			errupt++;
-		}
-		else
-		{
-			if(daemon)
-				printf("ERR:EBADCMD:\"%s\"\n", cmd);
+			else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+			{
+				// no params yet
+				errupt++;
+			}
 			else
-				fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
+			{
+				if(daemon)
+					printf("ERR:EBADCMD:\"%s\"\n", cmd);
+				else
+					fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
+			}
 		}
 		if(parmv)
 			free(parmv);
-		free(input);
+		if(input)
+			free(input);
 	}
 	return(0);
 }
