@@ -77,7 +77,7 @@ typedef enum
 {
 	DESC,	// Descendant ("E F")
 	CHLD,	// Child ("E > F")
-	SBLG,	// Sibling ("E + F")
+	SBLG,	// Adjacent Sibling ("E + F")
 	SELF	// own properties, like "E.f", "E:f" etc.
 }
 family;
@@ -121,6 +121,8 @@ int parse_selector(selector *, int);
 void tree_free(sel_elt * node);
 int treecmp(sel_elt * left, sel_elt * right);
 bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err);
+bool tree_match(sel_elt * curr, sel_elt * match);
+bool tm_next(sel_elt * curr, sel_elt * match);
 
 // global vars
 FILE *output;
@@ -1106,7 +1108,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 		else if(strcmp(sparm, "match")==0)
 		{
 			tree=true;
-			smatch=(char *)sort[i].chain; // it's a sel_ent *, really, not a char *
+			smatch=(char *)sort[i].chain; // it's a sel_elt *, really, not a char *
 		}
 		else if(strcmp(sparm, "dup")==0)
 		{
@@ -1142,11 +1144,18 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			case '=':
 				if(tree)
 				{
-					if(daemon)
-						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
-					else
-						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-					free(sparm);*err=true;return(false);
+					// TODO: parse the tree outside the loop, rather than once for each sel in the list
+					selector tmatch;
+					tmatch.text=cmp;
+					int e=parse_selector(&tmatch, -1);
+					if(e)
+					{
+						free(sparm);*err=true;return(false);
+					}
+					sel_elt * curr=(sel_elt *)smatch;
+					sel_elt * match=tmatch.chain;
+					show&=tree_match(curr, match);
+					tree_free(tmatch.chain);
 				}
 				else if(num)
 				{
@@ -1237,4 +1246,53 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 	}
 	sort[i].lmatch=show;
 	return(show);
+}
+
+bool tree_match(sel_elt * curr, sel_elt * match)
+{
+	if(curr)
+	{
+		switch(curr->type)
+		{
+			case UNIV:
+				return(tm_next(curr, match));
+				
+			break;
+			default:
+				if(daemon)
+					printf("ERR:EINTERN:TM:MATCHTYPE:%d\n", curr->type);
+				else
+					fprintf(output, "cssi: Error: Internal error in tree_match() - bad matchtype %d\n", curr->type);
+				return(false);
+			break;
+		}
+	}
+	else if(match)
+	{
+		return(false);
+	}
+	else return(true);
+}
+
+bool tm_next(sel_elt * curr, sel_elt * match)
+{
+	switch(curr->nextrel)
+	{
+		case NONE: // (*, x) -> true
+			return(true);
+		break;
+		case CHLD:
+			if(match)
+				return(tree_match(curr->next, match->next)); // (*>x, y>z) -> (x, z)
+			else
+				return(false);
+		break;
+		default:
+			if(daemon)
+				printf("ERR:EINTERN:TMN:NEXTREL:%d\n", curr->nextrel);
+			else
+				fprintf(output, "cssi: Error: Internal error in tm_next() - bad nextrel %d\n", curr->nextrel);
+			return(false);
+		break;
+	}
 }
