@@ -77,7 +77,7 @@ Sample usage of cssi:
 	$
 
 Tree-matching:
-NOTE: Tree-matching hasn't been completely implemented yet.  Work on it is being done in this branch, 'treematch'.
+NOTE: Tree-matching hasn't been completely implemented yet.
 See the section "Implementation Status" below.
 Format of a tree-match, in something approximating BNF:
 	<tree-match>::=	<prepension>?<html-tag>?<property>*(<relation><tree-match>)?
