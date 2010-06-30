@@ -1461,6 +1461,16 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 	{
 		switch(curr->prev->nextrel)
 		{
+			case CHLD:
+				if(match->prev)
+				{
+					return(tree_match_real(curr->prev, match->prev));
+				}
+				else
+				{
+					return(true); // TODO: when we have the prepension counter, test NZ and decrement
+				}
+			break;
 			default:
 				if(daemonmode)
 					printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
