@@ -1394,8 +1394,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					show&=(nmatch!=0);
 				else if(tree)
 				{
-					// "match=" matches everything
-					show&=true;
+					// ignore "match" without a comparator; matches everything
 				}
 				else
 					show&=smatch?smatch[0]:0;
