@@ -130,5 +130,6 @@ An empty element is considered to be a universal match; it is /always/ matched o
 You can also set optimism/pessimism for an entire matcher (apart from prepension) in one go, by using either "matcho" or "matchp", or match0 through matchf to set the optimism bitmask where 8=tag,4=id,2=class,1=pclass.  So matcho is matchf, matchp is match0, and match is matchb.
 So with all of these things included, the 'most specific' tree-match, which will match precisely those rules which apply to that link, becomes:
 	matchp=0html>body:first-child>div#main>h1:first-child.title+h2+p.toc>table:first-child>tr:first-child+tr>td:first-child.bar>a:first-child[href="#bar"]
+The matcher is case-sensitive.
 
 I'd just like to say, this is going to be /hell/ to implement.

@@ -1091,7 +1091,7 @@ int parse_selector(selector * s, int sid)
 				}
 				if(!chld)
 				{
-					chld=(sel_elt *)malloc(sizeof(sel_elt));
+					s->chain=chld=(sel_elt *)malloc(sizeof(sel_elt));
 					chld->prev=NULL;
 					chld->next=NULL;
 				}
@@ -1195,9 +1195,12 @@ int treecmp2(sel_elt2 * left, sel_elt2 * right)
 {
 	if(left && right)
 	{
-		int drel=left->nextrel - right->nextrel;
-		if(drel)
-			return(drel);
+		if(left->next && right->next)
+		{
+			int drel=left->nextrel - right->nextrel;
+			if(drel)
+				return(drel);
+		}
 		int dselfs=treecmp3(left->selfs, right->selfs);
 		if(dselfs)
 			return(dselfs);
@@ -1214,9 +1217,12 @@ int treecmp(sel_elt * left, sel_elt * right)
 {
 	if(left && right)
 	{
-		int drel=left->nextrel - right->nextrel;
-		if(drel)
-			return(drel);
+		if(left->next && right->next)
+		{
+			int drel=left->nextrel - right->nextrel;
+			if(drel)
+				return(drel);
+		}
 		int dsibs=treecmp2(left->sibs, right->sibs);
 		if(dsibs)
 			return(dsibs);
@@ -1421,17 +1427,45 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 
 bool tree_match_real(sel_elt *curr, sel_elt *match)
 {
-	if(!curr)
+	if(!curr) // * matches everything
 		return(true);
-	//sel_elt2 * sblg=curr?curr->last:NULL, *mblg=match?match->last:NULL;
-	switch(curr->nextrel)
+	sel_elt2 * sblg=curr->last, *mblg=match?match->last:NULL;
+	if(!sblg) // * matches everything
+		return(true);
+	sel_elt3 * selfs=sblg->selfs, *melfs=mblg?mblg->selfs:NULL;
+	bool selfmatch=true;
+	while(selfmatch && selfs && melfs) // the empty element is always matched
 	{
-		default:
-			if(daemonmode)
-				printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
-			else
-				fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
-			return(false);
-		break;
+		sel_elt3 * melfcurr=melfs;
+		bool nomatch=(selfs->type!=UNIV); // * matches everything
+		while(nomatch && melfcurr)
+		{
+			if(selfs->type==melfcurr->type)
+			{
+				if(strcmp(selfs->data, melfcurr->data)==0)
+					nomatch=false;
+			}
+			melfcurr=melfcurr->next;
+		}
+		if(nomatch)
+			selfmatch=false; // currently we're pessimistic about all four - matchp, aka match0.
+		selfs=selfs->next;
+	}
+	if(curr->prev)
+	{
+		switch(curr->prev->nextrel)
+		{
+			default:
+				if(daemonmode)
+					printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
+				else
+					fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
+				return(false);
+			break;
+		}
+	}
+	else
+	{
+		return(selfmatch);
 	}
 }
