@@ -133,6 +133,7 @@ You can also set optimism/pessimism for an entire matcher (apart from prepension
 So with all of these things included, the 'most specific' tree-match, which will match precisely those rules which apply to that link, becomes:
 	matchp=0html>body:first-child>div#main>h1:first-child.title+h2+p.toc>table:first-child>tr:first-child+tr>td:first-child.bar>a:first-child[href="#bar"]
 The matcher is case-sensitive.
+The default optimism and prepension settings should be alterable with some kind of option command (and cmdline options), but then we need something to mean "infinite" for prepension.
 
 Implementation status:
 The matcher basically functions, now, except that prepension limits are not supported (ie. the matcher always assumes infinite prepension) and pessimism is forced (ie. the optimism settings are not supported and the default is matchp).

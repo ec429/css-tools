@@ -1515,19 +1515,24 @@ bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs)
 	bool selfmatch=true;
 	while(selfmatch && selfs && melfs) // the empty element is always matched
 	{
+		bool hastag=false;
 		sel_elt3 * melfcurr=melfs;
 		bool nomatch=(selfs->type!=UNIV); // * matches everything
 		while(nomatch && melfcurr)
 		{
+			if(melfcurr->type==TAG)
+				hastag=true;
 			if(melfcurr->type==UNIV) // * matches everything
 				nomatch=false;
 			else if(selfs->type==melfcurr->type)
 			{
-				if(strcmp(selfs->data, melfcurr->data)==0)
+				if((melfcurr->data[0]=='?')||(strcmp(selfs->data, melfcurr->data)==0)) // if data begins with ?, it matches everything
 					nomatch=false;
 			}
 			melfcurr=melfcurr->next;
 		}
+		if((selfs->type==TAG) && !hastag) // if no tag is specified, optimism is forced upon you!
+			nomatch=false;
 		if(nomatch)
 			selfmatch=false; // currently we're pessimistic about all four - matchp, aka match0.
 		selfs=selfs->next;
