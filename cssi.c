@@ -1248,10 +1248,17 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 	int ent=sort[i].ent;
 	int file=entries[ent].file;
 	int parm;
-	for(parm=0;(parm<parmc)&&show;parm++) // technically, since we condition on show here, we don't need to &= in the body, we could just =
+	for(parm=0;(parm<parmc)&&show;parm++)
 	{
+		bool neg=false;
 		char *sparm=strdup(parmv[parm]);
-		char *cmp=sparm;
+		char *tparm=sparm;
+		if(*tparm=='!')
+		{
+			neg=true;
+			tparm++;
+		}
+		char *cmp=tparm;
 		while(*cmp && !strchr("=<>:", *cmp))
 			cmp++;
 		char wcmp=*cmp;
@@ -1262,34 +1269,34 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 		bool tree=false;
 		char *smatch=NULL;
 		int nmatch;
-		if(strcmp(sparm, "sid")==0)
+		if(strcmp(tparm, "sid")==0)
 		{
 			num=true;nmatch=i;
 		}
-		else if(strcmp(sparm, "file")==0)
+		else if(strcmp(tparm, "file")==0)
 		{
 			smatch=filename[file];
 		}
-		else if(strcmp(sparm, "line")==0)
+		else if(strcmp(tparm, "line")==0)
 		{
 			num=true;nmatch=entries[ent].line+(daemonmode?0:1); // daemon mode uses 0-based linenos
 		}
-		else if(strcmp(sparm, "match")==0)
+		else if(strcmp(tparm, "match")==0)
 		{
 			tree=true;
 			smatch=(char *)sort[i].chain; // it's a sel_elt *, really, not a char *
 		}
-		else if(strcmp(sparm, "dup")==0)
+		else if(strcmp(tparm, "dup")==0)
 		{
 			num=true;
 			nmatch=sort[i].dup;
 		}
-		else if(strcmp(sparm, "last")==0)
+		else if(strcmp(tparm, "last")==0)
 		{
 			num=true;
 			nmatch=lmatch;
 		}
-		else if(strcmp(sparm, "rows")==0)
+		else if(strcmp(tparm, "rows")==0)
 		{
 			num=true;
 			nmatch=nrows;
@@ -1323,16 +1330,16 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					}
 					sel_elt * curr=(sel_elt *)smatch;
 					sel_elt * match=tmatch.chain;
-					show&=tree_match(curr, match);
+					show=tree_match(curr, match);
 					tree_free(tmatch.chain);
 				}
 				else if(num)
 				{
-					show&=(nmatch == inval);
+					show=(nmatch == inval);
 				}
 				else
 				{
-					show&=(strcmp(smatch, cmp)==0);
+					show=(strcmp(smatch, cmp)==0);
 				}
 			break;
 			case '<':
@@ -1342,7 +1349,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 				if(num)
 				{
-					show&=eq?(nmatch <= inval):(nmatch < inval);
+					show=eq?(nmatch <= inval):(nmatch < inval);
 				}
 				else
 				{
@@ -1360,7 +1367,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 				if(num)
 				{
-					show&=eq?(nmatch >= inval):(nmatch > inval);
+					show=eq?(nmatch >= inval):(nmatch > inval);
 				}
 				else
 				{
@@ -1391,13 +1398,13 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			break;
 			case 0:
 				if(num)
-					show&=(nmatch!=0);
+					show=(nmatch!=0);
 				else if(tree)
 				{
 					// ignore "match" without a comparator; matches everything
 				}
 				else
-					show&=smatch?smatch[0]:0;
+					show=smatch?smatch[0]:0;
 			break;
 			default: // this should be impossible
 				if(daemonmode)
@@ -1407,6 +1414,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				free(sparm);*err=true;return(false);
 			break;
 		}
+		show^=neg; // XOR it with neg - if neg is true then we want to invert its sense
 		free(sparm);
 	}
 	sort[i].lmatch=show;

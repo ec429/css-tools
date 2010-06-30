@@ -26,10 +26,10 @@ Warnings:
 	-Wdupfile		Duplicate file; duplicates are always skipped whether the warning is on or not.  Default TRUE
 	-Watrule		At-rule positioning; an at-rule appears somewhere other than the start of a line, or is inside a selector.  Default TRUE
 Commands for the cssi shell:
-	selector <param>[<comparator><match>] [...]
-		Lists selectors matching the specified params.
+	selector [[!]<param>[<comparator><match>] [...]]
+		Lists selectors matching the specified params.  If a param is preceded by '!', its sense is inverted
 		Valid <param>s:
-			sid		the SelId of the selector
+			sid		the SelId of the selector (SelId is an internally-generated primary key)
 			file	the path/name of the file in which the selector appears
 			line	the line-number of the statement containing the selector
 			match	a tree-walk to which the selector must apply.  Only takes '=' and its semantics are changed to 'applies to'.  See section 'Tree-matching' below.
@@ -43,7 +43,7 @@ Commands for the cssi shell:
 			:		satisfies regex
 			no comparator: test nonzero
 		Param matches are ANDed together
-	declaration <param>[<comparator><match>] [...]
+	declaration [[!]<param>[<comparator><match>] [...]]
 		Lists the inner code (what's between the braces) of the selectors matching the specified params.
 		Valid params etc. are as for selector
 	quit
