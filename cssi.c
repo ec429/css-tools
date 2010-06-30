@@ -1440,7 +1440,9 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 		bool nomatch=(selfs->type!=UNIV); // * matches everything
 		while(nomatch && melfcurr)
 		{
-			if(selfs->type==melfcurr->type)
+			if(melfcurr->type==UNIV) // * matches everything
+				nomatch=false;
+			else if(selfs->type==melfcurr->type)
 			{
 				if(strcmp(selfs->data, melfcurr->data)==0)
 					nomatch=false;
@@ -1450,6 +1452,9 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 		if(nomatch)
 			selfmatch=false; // currently we're pessimistic about all four - matchp, aka match0.
 		selfs=selfs->next;
+	}
+	if(sblg->prev && mblg && mblg->prev)
+	{
 	}
 	if(curr->prev)
 	{
