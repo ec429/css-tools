@@ -1,6 +1,8 @@
 cssi
 test.*
 *.css
+*.zip
+*.exe
 *.tar
 *.gz
 css-tools/

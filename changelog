@@ -1,0 +1,74 @@
+==What's new in 0.1.8-2?==
+cssi:
++ Tree-matcher, always pessimistic except where internally overriden (fd0d01f,
+c27485b,0b35bd4,fa0dad1,dfd27a8,8acfedf,ad3c0db,580e8a4,3e71ff5,a4ad15c,
+3f40ded,b2f7972,4f34867,39534b9)
++ Param inversion with '!' for selector matching (sel and decl) (1411e13)
++ Prepension limits on tree-matching (d7792f9)
+# dup semantics: the value is the sid of the starred selector (e1d0673)
+# --max-warn short form is now -w (not -m) (caefa8b)
+# Global bool daemon renamed to daemonmode to fix OSX name collision (fa0dad1)
+# Changed sel_elt to a three-tiered structure of child, sibling, self
+x Segfault: input blank line at prompt (0202b10)
+
+==New in previous versions==
+
+=0.1.7=
+cssi:
++ Search param "last", true (NZ) if record was matched by the previous search
+ (9af4ccd)
++ Comparators ">=" and "<=" for searching (9af4ccd)
+x Invalid search generating swarms of error messages, regression in 0.1.6
+ (9af4ccd)
+
+=0.1.6=
+cssi:
++ Importpath trailing slash added if not present (c7a2ff5)
++ Param without comparator means test NZ (61b23ab)
++ dup counting and block marking (61b23ab)
++ decl command, lists what's in the {} of a selector (7b805a6)
+# Refactored selector matching into test() (857415c)
+
+=0.1.5=
+cssi:
++ Multiple importpaths; associate an importpath with each file (d4709ab)
++ New params 'dup' and 'rows' (755d25f)
+x -Wall includes -Watrule
+
+=0.1.4=
+cssi:
++ Search the selectors with params on 'sel': params 'sid', 'file', 'line' and
+ comparators '<', '>', '='.  '<', '>' can't be used on string params (248fb96)
++ Makefile rule 'install', takes PREFIX (default /usr/local) (248fb96)
++ Warning 'atrule', at-rule not at start of line.  Default active (dcb93b7)
+
+=0.1.3=
+cssi:
++ Sibling selectors '+' understood by parse_selector() (af3af40)
+x Family bug in parse_selector() when >, + appear without whitespace (ea8d854)
+x Segfault due to buffer overrun (89e8565)
+x Tabs confusing parse_selector() (89e8565)
+
+=0.1.2=
+cssi:
++ parse_selector(), turns a selector into a chain of sel_elt*s (e850e0f,
+ 3ef0a1a,579d431)
+# Rename mergesort() to selmergesort() to fix OSX name collision (08ae4e1)
+# Long-form output to stdout (not stderr) unless in daemon mode (242b1e5)
+x make dist needs all *.c,*.h (3ef0a1a)
+
+=0.1.1=
+cssi:
++ Max-warnings (-m,--max-warm=maxwarnings), default 10 (5d9532d)
++ All Warnings (-Wall, -Wno-all) (5d9532d)
++ Warning 'dupfile', catch duplicate files (6939039)
++ Simple command shell, 'sel' (list selectors), 'quit'. (9fce981)
+# Daemonmode semantics - strings should be quoted, trailing "..." denotes
+ multiline message (continues until a line is ".") (9fce981)
+x Don't print the "." to end multiline output when not in daemonmode (1887c54)
+x make dist cleans up after itself (b45a951)
+
+=0.1.0=
++cssi:
++ Parse, sort and list selectors in specified CSS file (6d87d96)
++ Generate the version number from 'git describe --tags' (6d87d96,a336f3c)
