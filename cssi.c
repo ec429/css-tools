@@ -145,6 +145,7 @@ bool tree_match_real(sel_elt *curr, sel_elt *match);
 // global vars
 FILE *output;
 bool daemonmode=false; // are we talking to another process? -d to set
+bool trace=false; // for debugging, trace the parser's state and position
 
 int main(int argc, char *argv[])
 {
@@ -155,7 +156,6 @@ int main(int argc, char *argv[])
 	char ** filename=NULL; // files to load
 	char *importpath="";
 	char ** assoc_ipath=NULL;
-	bool trace=false; // for debugging, trace the parser's state and position
 	bool wnewline=true;
 	bool wdupfile=true;
 	bool watrule=true;
@@ -908,6 +908,8 @@ int parse_selector(selector * s, int sid)
 	bool igwhite=false;
 	while(*(curr=s->text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
 	{
+		if(trace)
+			fprintf(output, "%d\t%d\t%hhu\t'%c'\t%p,%p,%p\t%s\n", state, pos+1, *curr, *curr, chld, sblg, self, cstr);
 		switch(state)
 		{
 			case 0: // get an identifier
@@ -1086,6 +1088,12 @@ int parse_selector(selector * s, int sid)
 					chld->next=NULL;
 					sblg=chld->sibs=NULL;
 					self=NULL;
+				}
+				if(!chld)
+				{
+					chld=(sel_elt *)malloc(sizeof(sel_elt));
+					chld->prev=NULL;
+					chld->next=NULL;
 				}
 				if(!sblg)
 				{
@@ -1413,5 +1421,17 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 
 bool tree_match_real(sel_elt *curr, sel_elt *match)
 {
-	
+	if(!curr)
+		return(true);
+	//sel_elt2 * sblg=curr?curr->last:NULL, *mblg=match?match->last:NULL;
+	switch(curr->nextrel)
+	{
+		default:
+			if(daemonmode)
+				printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
+			else
+				fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
+			return(false);
+		break;
+	}
 }
