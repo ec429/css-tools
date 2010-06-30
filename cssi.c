@@ -1457,7 +1457,7 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 			break;
 		}
 	}
-	if(curr->prev)
+	if(selfmatch && curr->prev)
 	{
 		switch(curr->prev->nextrel)
 		{
@@ -1470,6 +1470,20 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 				{
 					return(true); // TODO: when we have the prepension counter, test NZ and decrement
 				}
+			break;
+			case DESC: // At the moment, this always ends up TRUE, because with unlimited prepension, it can be a descendant of whatever you want it to be
+				if(false) // this "false" will become a test for "are prepension limits in force?"
+				{
+					while(match->prev)
+					{
+						bool matched=tree_match_real(curr->prev, match->prev);
+						if(matched)
+							return(true);
+						match=match->prev;
+					}
+					return(true);
+				}
+				return(true); // TODO: when we have the prepension counter, test NZ and decrement
 			break;
 			default:
 				if(daemonmode)
