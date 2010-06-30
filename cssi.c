@@ -1096,13 +1096,11 @@ int parse_selector(selector * s, int sid)
 				if(!self)
 				{
 					self=(sel_elt3 *)malloc(sizeof(sel_elt3));
-					self->prev=NULL;
 					sblg->selfs=self;
 				}
 				else
 				{
-					sel_elt3 * next=(sel_elt3 *)malloc(sizeof(sel_elt3))
-					next->prev=self;
+					sel_elt3 * next=(sel_elt3 *)malloc(sizeof(sel_elt3));
 					self=self->next=next;
 				}
 				self->type=type;
