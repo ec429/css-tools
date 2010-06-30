@@ -1248,7 +1248,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 	int ent=sort[i].ent;
 	int file=entries[ent].file;
 	int parm;
-	for(parm=0;(parm<parmc)&&show;parm++)
+	for(parm=0;(parm<parmc)&&show;parm++) // technically, since we condition on show here, we don't need to &= in the body, we could just =
 	{
 		char *sparm=strdup(parmv[parm]);
 		char *cmp=sparm;
@@ -1391,17 +1391,14 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			break;
 			case 0:
 				if(num)
-					show=(nmatch!=0);
+					show&=(nmatch!=0);
 				else if(tree)
 				{
-					if(daemonmode)
-						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
-					else
-						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
-					free(sparm);*err=true;return(false);
+					// "match=" matches everything
+					show&=true;
 				}
 				else
-					show=smatch?smatch[0]:0;
+					show&=smatch?smatch[0]:0;
 			break;
 			default: // this should be impossible
 				if(daemonmode)
