@@ -143,6 +143,7 @@ bool tree_match(sel_elt * curr, sel_elt * match);
 bool tree_match_real(sel_elt *curr, sel_elt *match);
 bool tree_match_2(sel_elt2 *sblg, sel_elt2 *mblg);
 bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs);
+bool has_firstchild(sel_elt3 *melfs);
 
 // global vars
 FILE *output;
@@ -1018,12 +1019,14 @@ int parse_selector(selector * s, int sid)
 					if(!sblg)
 					{
 						chld->sibs=sblg=(sel_elt2 *)malloc(sizeof(sel_elt2));
+						sblg->next=NULL;
 						sblg->prev=NULL;
 						sblg->selfs=NULL;
 					}
 					next->prev=sblg;
 					sblg->nextrel=SBLG;
 					sblg=sblg->next=next;
+					sblg->next=NULL;
 					sblg->selfs=NULL;
 					desc=false;
 					pos++;
@@ -1416,6 +1419,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 
 bool tree_match(sel_elt * curr, sel_elt * match)
 {
+	//fprintf(stderr, "tree_match(%p,%p)\n", curr, match);
 	if(curr)
 	{
 		sel_elt * clast=curr;
@@ -1429,24 +1433,33 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 
 bool tree_match_real(sel_elt *curr, sel_elt *match)
 {
+	//fprintf(stderr, "tree_match_real(%p,%p)\n", curr, match);
 	if(!curr) // * matches everything
 		return(true);
 	sel_elt2 * sblg=curr->last, *mblg=match?match->last:NULL;
+	//fprintf(stderr, "sblg=%p, mblg=%p\n", sblg, mblg);
 	if(!sblg) // * matches everything
 		return(true);
 	sel_elt3 * selfs, *melfs;
 	repeat2:
 	selfs=sblg->selfs;
 	melfs=mblg?mblg->selfs:NULL;
+	//fprintf(stderr, "selfs=%p, melfs=%p\n", selfs, melfs);
 	bool selfmatch=tree_match_3(selfs, melfs);
-	if(selfmatch && sblg->prev && mblg && mblg->prev)
+	if(selfmatch && sblg->prev && mblg)
 	{
 		switch(sblg->prev->nextrel)
 		{
-			case SBLG:
-				sblg=sblg->prev;
-				mblg=mblg->prev;
-				goto repeat2;
+			case SBLG: // TODO some kind of checking to deal with inappropriate explicit :first-child - maybe in parse_selector()
+				if(has_firstchild(melfs)) // x+y can never match :first-child
+					return(false);
+				else if(mblg->prev) // if not, we just ignore the rest of the elder siblings, because prepending sibs doesn't cost a prepend
+				{
+					sblg=sblg->prev;
+					mblg=mblg->prev;
+					//fprintf(stderr, "repeat2: sblg=%p, mblg=%p\n", sblg, mblg);
+					goto repeat2;
+				}
 			break;
 			default:
 				if(daemonmode)
@@ -1457,6 +1470,7 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 			break;
 		}
 	}
+	//fprintf(stderr, "%d, childing\n", selfmatch);
 	if(selfmatch && curr->prev)
 	{
 		switch(curr->prev->nextrel)
@@ -1523,4 +1537,13 @@ bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs)
 		selfs=selfs->next;
 	}
 	return(selfmatch);
+}
+
+bool has_firstchild(sel_elt3 *melfs)
+{
+	sel_elt3 selfs;
+	selfs.type=PCLASS;
+	selfs.data="firstchild";
+	selfs.next=NULL;
+	return(tree_match_3(&selfs, melfs));
 }
