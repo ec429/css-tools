@@ -94,12 +94,29 @@ typedef enum
 }
 seltype;
 
-typedef struct _sel_elt
+typedef struct _sel_elt3 // selfing
 {
 	seltype type;
 	char * data; // eg "#foo" becomes type=ID, data="foo"; "[bar]" becomes type=ATTR, data="bar".
-	family nextrel;
+	struct _sel_elt3 * next; // linked-list
+}
+sel_elt3;
+
+typedef struct _sel_elt2 // sibling
+{
+	sel_elt3 * selfs; // Should never be NULL
+	family nextrel; // should be SBLG (or Generalised sibling, when we implement that (~))
+	struct _sel_elt2 * next; // linked-list
+	struct _sel_elt2 * prev; // doubly!
+}
+sel_elt2;
+
+typedef struct _sel_elt // childing/descing
+{
+	sel_elt2 * sibs; // NULL means "*"
+	family nextrel; // should be CHLD or DESC
 	struct _sel_elt * next; // linked-list
+	struct _sel_elt * prev; // doubly!
 }
 sel_elt;
 
@@ -122,11 +139,11 @@ void tree_free(sel_elt * node);
 int treecmp(sel_elt * left, sel_elt * right);
 bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err);
 bool tree_match(sel_elt * curr, sel_elt * match);
-bool tm_next(sel_elt * curr, sel_elt * match);
+bool tree_match_real(sel_elt *curr, sel_elt *match);
 
 // global vars
 FILE *output;
-bool daemon=false; // are we talking to another process? -d to set
+bool daemonmode=false; // are we talking to another process? -d to set
 
 int main(int argc, char *argv[])
 {
@@ -153,7 +170,7 @@ int main(int argc, char *argv[])
 		}
 		else if((strcmp(argt, "-d")==0)||(strcmp(argt, "--daemon")==0))
 		{
-			daemon=true;
+			daemonmode=true;
 			output=stderr;
 			fprintf(output, "cssi: Daemon mode is active.\n");
 			printf("CSSI:\"%s\"\n", VERSION);//%hhu.%hhu.%hhu\n", version_maj, version_min, version_rev);
@@ -226,7 +243,7 @@ int main(int argc, char *argv[])
 	if(filename==NULL)
 	{
 		fprintf(output, "cssi: Error: No file given on command line!\n"USAGE_STRING"\n");
-		if(daemon)
+		if(daemonmode)
 			printf("ERR:ENOFILE\n");
 		return(1);
 	}
@@ -246,7 +263,7 @@ int main(int argc, char *argv[])
 				if(wdupfile && (nwarnings++<maxwarnings))
 				{
 					fprintf(output, "cssi: warning: Duplicate file in set%s: %s\n", i<initnfiles?"":" (from @import)", filename[i]);
-					if(daemon)
+					if(daemonmode)
 						printf("WARN:WDUPFILE:%d:\"%s\"\n", i<initnfiles?0:1, filename[i]);
 				}
 				goto skip; // there is *nothing* *wrong* with the occasional goto
@@ -259,7 +276,7 @@ int main(int argc, char *argv[])
 		if(!fp)
 		{
 			fprintf(output, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
-			if(daemon)
+			if(daemonmode)
 				printf("ERR:ECANTREAD:\"%s\"\n", i==nfiles?"<stdin>":filename[i]);
 			return(1);
 		}
@@ -273,7 +290,7 @@ int main(int argc, char *argv[])
 			{
 				fprintf(output, "cssi: Error: Failed to alloc mem for input file.\n");
 				perror("malloc/realloc");
-				if(daemon)
+				if(daemonmode)
 					printf("ERR:EMEM\n");
 				return(1);
 			}
@@ -282,7 +299,7 @@ int main(int argc, char *argv[])
 			{
 				fprintf(output, "cssi: Error: Failed to alloc mem for input file.\n");
 				perror("malloc/realloc");
-				if(daemon)
+				if(daemonmode)
 					printf("ERR:EMEM\n");
 				return(1);
 			}
@@ -295,7 +312,7 @@ int main(int argc, char *argv[])
 		}
 		
 		fprintf(output, "cssi: processing %s\n", i==nfiles?"<stdin>":filename[i]);
-		if(daemon)
+		if(daemonmode)
 			printf("PROC:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 	
 		// Parse it with a state machine
@@ -325,7 +342,7 @@ int main(int argc, char *argv[])
 				{
 					fprintf(output, PARSERR"\tUnexpected EOL\n", PARSARG);
 					fprintf(output, PMKLINE);
-					if(daemon)
+					if(daemonmode)
 						printf(DPARSERR"unexpected EOL\n", DPARSARG);
 					return(2);
 				}
@@ -370,7 +387,7 @@ int main(int argc, char *argv[])
 						{
 							fprintf(output, PARSEWARN"\tMissing newline between entries\n", PARSEWARG);
 							fprintf(output, PMKLINE);
-							if(daemon)
+							if(daemonmode)
 								printf(DPARSEWARN"missing newline between entries\n", DPARSEWARG);
 						}
 						if(*curr==';')
@@ -383,7 +400,7 @@ int main(int argc, char *argv[])
 							{
 								fprintf(output, PARSEWARN"\tAt-rule not at start of line\n", PARSEWARG);
 								fprintf(output, PMKLINE);
-								if(daemon)
+								if(daemonmode)
 									printf(DPARSEWARN"at-rule not at start of line\n", DPARSEWARG);
 							}
 							if(strncmp(curr, "@import", strlen("@import"))==0)
@@ -396,7 +413,7 @@ int main(int argc, char *argv[])
 								{
 									fprintf(output, PARSERR"\tMalformed @import directive\n", PARSARG);
 									fprintf(output, PMKLINE);
-									if(daemon)
+									if(daemonmode)
 										printf(DPARSERR"malformed @import directive\n", DPARSARG);
 									return(2);
 								}
@@ -406,7 +423,7 @@ int main(int argc, char *argv[])
 								{
 									fprintf(output, PARSERR"\tMalformed @import directive\n", PARSARG);
 									fprintf(output, PMKLINE);
-									if(daemon)
+									if(daemonmode)
 										printf(DPARSERR"malformed @import directive\n", DPARSARG);
 									return(2);
 								}
@@ -428,7 +445,7 @@ int main(int argc, char *argv[])
 							{
 								fprintf(output, PARSERR"\tUnrecognised at-rule\n", PARSARG);
 								fprintf(output, PMKLINE);
-								if(daemon)
+								if(daemonmode)
 									printf(DPARSERR"unrecognised at-rule\n", DPARSARG);
 								return(2);
 							}
@@ -454,7 +471,7 @@ int main(int argc, char *argv[])
 								{
 									fprintf(output, PARSERR"\tEmpty selector before comma\n", PARSARG);
 									fprintf(output, PMKLINE);
-									if(daemon)
+									if(daemonmode)
 										printf(DPARSERR"empty selector before comma\n", DPARSARG);
 									return(2);
 								}
@@ -466,7 +483,7 @@ int main(int argc, char *argv[])
 								{
 									fprintf(output, PARSERR"\tEmpty selector before decl\n", PARSARG);
 									fprintf(output, PMKLINE);
-									if(daemon)
+									if(daemonmode)
 										printf(DPARSERR"empty selector before decl\n", DPARSARG);
 									return(2);
 								}
@@ -567,7 +584,7 @@ int main(int argc, char *argv[])
 					default:
 						fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
 						fprintf(output, PMKLINE);
-						if(daemon)
+						if(daemonmode)
 							printf(DPARSERR"no such state\n", DPARSARG);
 						return(2);
 					break;
@@ -576,22 +593,22 @@ int main(int argc, char *argv[])
 		}
 		free(mfile);
 		fprintf(output, "cssi: parsed %s\n", i==nfiles?"<stdin>":filename[i]);
-		if(daemon)
+		if(daemonmode)
 			printf("PARSED:\"%s\"\n", i==nfiles?"<stdin>":filename[i]); // Warning; it is possible to have a file named '<stdin>', though unlikely
 		skip:;
 	}
 	fprintf(output, "cssi: Parsing completed\n");
-	if(daemon)
+	if(daemonmode)
 		printf("PARSED*\n");
 	if(nwarnings>maxwarnings)
 	{
 		fprintf(output, "cssi: warning: %d more warnings were not displayed.\n", nwarnings-maxwarnings);
-		if(daemon)
+		if(daemonmode)
 			printf("XSWARN:%d\n", nwarnings-maxwarnings);
 	}
 	
 	fprintf(output, "cssi: collating & parsing selectors\n");
-	if(daemon)
+	if(daemonmode)
 		printf("COLL:\n");
 	int nsels=0;
 	selector * sels=NULL;
@@ -638,7 +655,7 @@ int main(int argc, char *argv[])
 	fprintf(output, "cssi: collated & parsed selectors\n");
 	if(nerrs)
 		fprintf(output, "cssi:  there were %d errors.\n", nerrs);
-	if(daemon)
+	if(daemonmode)
 		printf("COLL*:%d\n", nerrs);
 	
 	int errupt=0;
@@ -660,7 +677,7 @@ int main(int argc, char *argv[])
 		{
 			if(strncmp(cmd, "selector", strlen(cmd))==0) // selectors
 			{
-				if(daemon)
+				if(daemonmode)
 					printf("SEL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 				else
 					fprintf(output, "cssi: listing SELECTORS\n");
@@ -674,18 +691,18 @@ int main(int argc, char *argv[])
 					if(show)
 					{
 						nrows++;
-						if(daemon)
+						if(daemonmode)
 							printf("RECORD:ID=%d:FILE=\"%s\":LINE=%d:DUP=%d:SEL=\"%s\"\n", i, file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].dup, sort[i].text);
 						else
 							fprintf(output, "%d%s\tIn %s at %d:\t%s\n", i, sort[i].dup?sort[i].dup==i?"*":"+":"", file<nfiles?filename[file]:"<stdin>", entries[ent].line+1, sort[i].text);
 					}
 				}
-				if(daemon)
+				if(daemonmode)
 					printf(".\n");
 			}
 			else if(strncmp(cmd, "declaration", strlen(cmd))==0) // contents of a sel's {}
 			{
-				if(daemon)
+				if(daemonmode)
 					printf("DECL...\n"); // line ending with '...' indicates "continue until a line is '.'"
 				else
 					fprintf(output, "cssi: listing DECLARATIONS\n");
@@ -698,13 +715,13 @@ int main(int argc, char *argv[])
 					if(show)
 					{
 						nrows++;
-						if(daemon)
+						if(daemonmode)
 							printf("RECORD:ID=%d:DECL=\"%s\"\n", i, entries[ent].innercode);
 						else
 							fprintf(output, "%d\t{%s}\n", i, entries[ent].innercode);
 					}
 				}
-				if(daemon)
+				if(daemonmode)
 					printf(".\n");
 			}
 			else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
@@ -714,7 +731,7 @@ int main(int argc, char *argv[])
 			}
 			else
 			{
-				if(daemon)
+				if(daemonmode)
 					printf("ERR:EBADCMD:\"%s\"\n", cmd);
 				else
 					fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
@@ -875,7 +892,6 @@ selector * selmergesort(selector * array, int len)
 
 int parse_selector(selector * s, int sid)
 {
-	// TODO: correctly handle things like ">>".  Perhaps reorganise sel_elt as child(sibling(simpleselector))?
 	s->chain=NULL; // initially empty
 	// state machine
 	int state=0;
@@ -883,8 +899,10 @@ int parse_selector(selector * s, int sid)
 	char *curr;
 	char *cstr=NULL;
 	int cstl=0;
-	family nextrel=SELF;
-	sel_elt * node=s->chain;
+	bool desc=false;
+	sel_elt *chld=NULL;
+	sel_elt2 *sblg=NULL;
+	sel_elt3 *self=NULL;
 	seltype type=NONE;
 	bool igwhite=false;
 	while(*(curr=s->text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
@@ -894,6 +912,17 @@ int parse_selector(selector * s, int sid)
 			case 0: // get an identifier
 				if(*curr=='.')
 				{
+					if(desc && chld)
+					{
+						sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+						next->prev=chld;
+						chld->nextrel=DESC;
+						chld=chld->next=next;
+						chld->next=NULL;
+						sblg=chld->sibs=NULL;
+						self=NULL;
+						desc=false;
+					}
 					pos++;
 					state=1;
 					type=CLASS;
@@ -901,6 +930,17 @@ int parse_selector(selector * s, int sid)
 				}
 				else if(*curr==':')
 				{
+					if(desc && chld)
+					{
+						sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+						next->prev=chld;
+						chld->nextrel=DESC;
+						chld=chld->next=next;
+						chld->next=NULL;
+						sblg=chld->sibs=NULL;
+						self=NULL;
+						desc=false;
+					}
 					pos++;
 					state=1;
 					type=PCLASS;
@@ -908,6 +948,17 @@ int parse_selector(selector * s, int sid)
 				}
 				else if(*curr=='#')
 				{
+					if(desc && chld)
+					{
+						sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+						next->prev=chld;
+						chld->nextrel=DESC;
+						chld=chld->next=next;
+						chld->next=NULL;
+						sblg=chld->sibs=NULL;
+						self=NULL;
+						desc=false;
+					}
 					pos++;
 					state=1;
 					type=ID;
@@ -915,6 +966,17 @@ int parse_selector(selector * s, int sid)
 				}
 				else if(*curr=='*')
 				{
+					if(desc && chld)
+					{
+						sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+						next->prev=chld;
+						chld->nextrel=DESC;
+						chld=chld->next=next;
+						chld->next=NULL;
+						sblg=chld->sibs=NULL;
+						self=NULL;
+						desc=false;
+					}
 					type=UNIV;
 					cstr=NULL;
 					state=2;
@@ -922,19 +984,43 @@ int parse_selector(selector * s, int sid)
 				}
 				else if(strchr(" \t\n\r\f", *curr)) // whitespace (though \n should /not/ happen)
 				{
-					if(!igwhite)
-						nextrel=DESC;
+					if(chld && !igwhite) // ignore ws at the beginning of a sel or after a > or + (or suchlike)
+						desc=true;
 					pos++;
 				}
 				else if(*curr=='>')
 				{
-					nextrel=CHLD;
+					sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+					if(!chld)
+					{
+						s->chain=chld=(sel_elt *)malloc(sizeof(sel_elt));
+						chld->prev=NULL;
+						chld->sibs=NULL;
+					}
+					next->prev=chld;
+					chld->nextrel=CHLD;
+					chld=chld->next=next;
+					chld->next=NULL;
+					sblg=chld->sibs=NULL;
+					self=NULL;
+					desc=false;
 					pos++;
 					igwhite=true; // ' > ' is like '>', not ' '.
 				}
 				else if(*curr=='+')
 				{
-					nextrel=SBLG;
+					sel_elt2 * next=(sel_elt2 *)malloc(sizeof(sel_elt2));
+					if(!sblg)
+					{
+						chld->sibs=sblg=(sel_elt2 *)malloc(sizeof(sel_elt2));
+						sblg->prev=NULL;
+						sblg->selfs=NULL;
+					}
+					next->prev=sblg;
+					sblg->nextrel=SBLG;
+					sblg=sblg->next=next;
+					sblg->selfs=NULL;
+					desc=false;
 					pos++;
 					igwhite=true; // ' + ' is like '+', not ' '.
 				}
@@ -966,7 +1052,7 @@ int parse_selector(selector * s, int sid)
 					{
 						fprintf(output, SPARSERR"\tEmpty selent\n", SPARSARG);
 						fprintf(output, SPMKLINE);
-						if(daemon)
+						if(daemonmode)
 							printf(DSPARSERR"empty selent\n", DSPARSARG);
 						tree_free(s->chain);
 						return(1);
@@ -984,35 +1070,53 @@ int parse_selector(selector * s, int sid)
 					{
 						fprintf(output, SPARSERR"\tUnrecognised identifier '%s'\n", SPARSARG, cstr);
 						fprintf(output, SPMKLINE);
-						if(daemon)
+						if(daemonmode)
 							printf(DSPARSERR"unrecognised identifier\n", DSPARSARG);
 						tree_free(s->chain);
 						return(1);
 					}
 				}
-				if(!node)
+				if(desc&&chld)
 				{
-					node=(sel_elt *)malloc(sizeof(sel_elt));
-					node->nextrel=NONE;
-					s->chain=node;
+					sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
+					next->prev=chld;
+					chld->nextrel=DESC;
+					chld=chld->next=next;
+					chld->next=NULL;
+					sblg=chld->sibs=NULL;
+					self=NULL;
+				}
+				if(!sblg)
+				{
+					sblg=chld->sibs=(sel_elt2 *)malloc(sizeof(sel_elt2));
+					sblg->next=NULL;
+					sblg->prev=NULL;
+					self=sblg->selfs=NULL;
+				}
+				if(!self)
+				{
+					self=(sel_elt3 *)malloc(sizeof(sel_elt3));
+					self->prev=NULL;
+					sblg->selfs=self;
 				}
 				else
 				{
-					node->nextrel=nextrel;nextrel=SELF;
-					node=(node->next=(sel_elt *)malloc(sizeof(sel_elt)));
+					sel_elt3 * next=(sel_elt3 *)malloc(sizeof(sel_elt3))
+					next->prev=self;
+					self=self->next=next;
 				}
-				node->type=type;
-				node->data=cstr;
-				node->next=NULL; // until (and if) we get one
-				node->nextrel=NONE; // until (and if) we get one
+				self->type=type;
+				self->data=cstr;
+				self->next=NULL; // until (and if) we get one
 				cstr=NULL;cstl=0; // disconnect the pointer
 				state=0; // return to reading-state
 				igwhite=false;
+				desc=false;
 			break;
 			default:
 				fprintf(output, SPARSERR"\tNo such state!\n", SPARSARG);
 				fprintf(output, SPMKLINE);
-				if(daemon)
+				if(daemonmode)
 					printf(DSPARSERR"no such state\n", DSPARSARG);
 				tree_free(s->chain);
 				return(1);
@@ -1022,48 +1126,86 @@ int parse_selector(selector * s, int sid)
 	return(0);
 }
 
+void tree_free3(sel_elt3 * node)
+{
+	if(node)
+	{
+		if(node->data)
+			free(node->data);
+		tree_free3(node->next);
+		free(node);
+	}
+}
+
+void tree_free2(sel_elt2 * node)
+{
+	if(node)
+	{
+		tree_free2(node->next);
+		tree_free3(node->selfs);
+		free(node);
+	}
+}
+
 void tree_free(sel_elt * node)
 {
 	if(node)
 	{
 		tree_free(node->next);
-		if(node->data)
-			free(node->data);
+		tree_free2(node->sibs);
 		free(node);
 	}
 }
 
-int treecmp(sel_elt * left, sel_elt * right)
+int treecmp3(sel_elt3 * left, sel_elt3 * right)
 {
 	if(left && right)
 	{
 		int dtype=left->type - right->type;
 		if(dtype)
 			return(dtype);
-		if(left->data && right->data)
-		{
-			int ddata=strcmp(left->data, right->data);
-			if(ddata)
-				return(ddata);
-		}
-		else if(left->data)
-		{
-			return(1);
-		}
-		else if(right->data)
-		{
-			return(-1);
-		}
+		int ddata=strcmp(left->data, right->data);
+		if(ddata)
+			return(ddata);
+		return(treecmp3(left->next, right->next));
+	}
+	if(left)
+		return(1);
+	if(right)
+		return(-1);
+	return(0);
+}
+
+int treecmp2(sel_elt2 * left, sel_elt2 * right)
+{
+	if(left && right)
+	{
 		int drel=left->nextrel - right->nextrel;
 		if(drel)
 			return(drel);
-		if(left->next && right->next)
-			return(treecmp(left->next, right->next));
-		if(left->next) // and hence not right->next
-			return(1); // so right precedes left
-		if(right->next)
-			return(-1);
-		return(0);
+		int dselfs=treecmp3(left->selfs, right->selfs);
+		if(dselfs)
+			return(dselfs);
+		return(treecmp2(left->next, right->next));
+	}
+	if(left)
+		return(1);
+	if(right)
+		return(-1);
+	return(0);
+}
+
+int treecmp(sel_elt * left, sel_elt * right)
+{
+	if(left && right)
+	{
+		int drel=left->nextrel - right->nextrel;
+		if(drel)
+			return(drel);
+		int dsibs=treecmp2(left->sibs, right->sibs);
+		if(dsibs)
+			return(dsibs);
+		return(treecmp(left->next, right->next));
 	}
 	if(left)
 		return(1);
@@ -1104,7 +1246,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 		}
 		else if(strcmp(sparm, "line")==0)
 		{
-			num=true;nmatch=entries[ent].line+(daemon?0:1); // daemon mode uses 0-based linenos
+			num=true;nmatch=entries[ent].line+(daemonmode?0:1); // daemon mode uses 0-based linenos
 		}
 		else if(strcmp(sparm, "match")==0)
 		{
@@ -1129,7 +1271,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 		}
 		else
 		{
-			if(daemon)
+			if(daemonmode)
 				printf("ERR:EBADPARM:BADPARAM:%d:\"%s\"\n", parm, parmv[parm]);
 			else
 				fprintf(output, "cssi: Error: Bad matcher %s (unrecognised param)\n", parmv[parm]);
@@ -1178,7 +1320,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 				else
 				{
-					if(daemon)
+					if(daemonmode)
 						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: '<' is for numerics only (%s)\n", parmv[parm]);
@@ -1196,7 +1338,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 				else
 				{
-					if(daemon)
+					if(daemonmode)
 						printf("ERR:EBADPARM:NUMCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: '>' is for numerics only (%s)\n", parmv[parm]);
@@ -1206,7 +1348,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			case ':':
 				if(num||tree)
 				{
-					if(daemon)
+					if(daemonmode)
 						printf("ERR:EBADPARM:STRCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: ':' is for strings only (%s)\n", parmv[parm]);
@@ -1214,7 +1356,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 				}
 				else
 				{
-					if(daemon)
+					if(daemonmode)
 						printf("ERR:ENOSYS:REGEXMATCH:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: regex-matching unimplemented (%s)\n", parmv[parm]);
@@ -1226,7 +1368,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					show=(nmatch!=0);
 				else if(tree)
 				{
-					if(daemon)
+					if(daemonmode)
 						printf("ERR:ENOSYS:TREEMATCH:%d:\"%s\"\n", parm, parmv[parm]);
 					else
 						fprintf(output, "cssi: Error: tree-matching unimplemented (%s)\n", parmv[parm]);
@@ -1236,7 +1378,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					show=smatch?smatch[0]:0;
 			break;
 			default: // this should be impossible
-				if(daemon)
+				if(daemonmode)
 					printf("ERR:EBADPARM:BADCOMP:%d:\"%s\"\n", parm, parmv[parm]);
 				else
 					fprintf(output, "cssi: Error: Bad matcher %s (bad comparator)\n", parmv[parm]);
@@ -1253,70 +1395,16 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 {
 	if(curr)
 	{
-		switch(curr->type)
-		{
-			case UNIV:
-				return(tm_next(curr, match));
-			break;
-			case TAG:
-				
-			break;
-			default:
-				if(daemon)
-					printf("ERR:EINTERN:TM:MATCHTYPE:%d\n", curr->type);
-				else
-					fprintf(output, "cssi: Error: Internal error in tree_match() - bad matchtype %d\n", curr->type);
-				return(false);
-			break;
-		}
+		sel_elt * clast=curr;
+		while(clast->next) clast=clast->next;
+		sel_elt * mlast=match;
+		while(mlast && mlast->next) mlast=mlast->next;
+		return tree_match_real(clast, mlast); // a match of NULL means prepension is completely acceptable - "match=" matches everything
 	}
-	else if(match)
-	{
-		return(false);
-	}
-	else return(true);
+	else return(true); // * matches everything
 }
 
-bool tm_next(sel_elt * curr, sel_elt * match)
+bool tree_match_real(sel_elt *curr, sel_elt *match)
 {
-	switch(curr->nextrel)
-	{
-		case CHLD:
-			sel_elt * ns = tm_ns(match); // ns == Not Self
-			if(ns && )
-				return(tree_match(curr->next, ns)); // (*>x, y>z) -> (x, z)
-			else
-				return(false);
-		break;
-		case SELF:
-			if(curr->next)
-				return(tm_next(curr->next, match));
-			else if(match)
-				return(false);
-			else
-				return(true);
-		break;
-		default:
-			if(daemon)
-				printf("ERR:EINTERN:TMN:NEXTREL:%d\n", curr->nextrel);
-			else
-				fprintf(output, "cssi: Error: Internal error in tm_next() - bad nextrel %d\n", curr->nextrel);
-			return(false);
-		break;
-	}
-}
-
-sel_elt * tm_ns(sel_elt * match)
-{
-	if(match)
-	{
-		switch(match->nextrel)
-		{
-			case SELF:
-			break;
-			default:
-				return(match->next);
-			break;
-		}
-	}
+	
 }
