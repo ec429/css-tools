@@ -114,6 +114,7 @@ sel_elt2;
 typedef struct _sel_elt // childing/descing
 {
 	sel_elt2 * sibs; // NULL means "*"
+	sel_elt2 * last; // the last sibling (ie. the one we actually match into)
 	family nextrel; // should be CHLD or DESC
 	struct _sel_elt * next; // linked-list
 	struct _sel_elt * prev; // doubly!
@@ -1120,6 +1121,14 @@ int parse_selector(selector * s, int sid)
 				return(1);
 			break;
 		}
+	}
+	chld=s->chain;
+	while(chld)
+	{
+		sblg=chld->sibs;
+		while(sblg && sblg->next) sblg=sblg->next;
+		chld->last=sblg;
+		chld=chld->next;
 	}
 	return(0);
 }
