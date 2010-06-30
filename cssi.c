@@ -105,7 +105,7 @@ sel_elt3;
 typedef struct _sel_elt2 // sibling
 {
 	sel_elt3 * selfs; // Should never be NULL
-	family nextrel; // should be SBLG (or Generalised sibling, when we implement that (~))
+	family nextrel; // should be SBLG (or Generalised sibling, when we implement that (~); only SBLG in a match - will need to enforce when implemented)
 	struct _sel_elt2 * next; // linked-list
 	struct _sel_elt2 * prev; // doubly!
 }
@@ -115,7 +115,7 @@ typedef struct _sel_elt // childing/descing
 {
 	sel_elt2 * sibs; // NULL means "*"
 	sel_elt2 * last; // the last sibling (ie. the one we actually match into)
-	family nextrel; // should be CHLD or DESC
+	family nextrel; // should be CHLD or DESC (only CHLD in a match)
 	struct _sel_elt * next; // linked-list
 	struct _sel_elt * prev; // doubly!
 }
@@ -141,6 +141,8 @@ int treecmp(sel_elt * left, sel_elt * right);
 bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err);
 bool tree_match(sel_elt * curr, sel_elt * match);
 bool tree_match_real(sel_elt *curr, sel_elt *match);
+bool tree_match_2(sel_elt2 *sblg, sel_elt2 *mblg);
+bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs);
 
 // global vars
 FILE *output;
@@ -1432,7 +1434,50 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 	sel_elt2 * sblg=curr->last, *mblg=match?match->last:NULL;
 	if(!sblg) // * matches everything
 		return(true);
-	sel_elt3 * selfs=sblg->selfs, *melfs=mblg?mblg->selfs:NULL;
+	sel_elt3 * selfs, *melfs;
+	repeat2:
+	selfs=sblg->selfs;
+	melfs=mblg?mblg->selfs:NULL;
+	bool selfmatch=tree_match_3(selfs, melfs);
+	if(selfmatch && sblg->prev && mblg && mblg->prev)
+	{
+		switch(sblg->prev->nextrel)
+		{
+			case SBLG:
+				sblg=sblg->prev;
+				mblg=mblg->prev;
+				goto repeat2;
+			break;
+			default:
+				if(daemonmode)
+					printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
+				else
+					fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
+				return(false);
+			break;
+		}
+	}
+	if(curr->prev)
+	{
+		switch(curr->prev->nextrel)
+		{
+			default:
+				if(daemonmode)
+					printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
+				else
+					fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
+				return(false);
+			break;
+		}
+	}
+	else
+	{
+		return(selfmatch);
+	}
+}
+
+bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs)
+{
 	bool selfmatch=true;
 	while(selfmatch && selfs && melfs) // the empty element is always matched
 	{
@@ -1453,24 +1498,5 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 			selfmatch=false; // currently we're pessimistic about all four - matchp, aka match0.
 		selfs=selfs->next;
 	}
-	if(sblg->prev && mblg && mblg->prev)
-	{
-	}
-	if(curr->prev)
-	{
-		switch(curr->prev->nextrel)
-		{
-			default:
-				if(daemonmode)
-					printf("ERR:EINTERN:NEXTREL:%d\n", curr->nextrel);
-				else
-					fprintf(output, "cssi: Error: Internal error (Bad nextrel %d)\n", curr->nextrel);
-				return(false);
-			break;
-		}
-	}
-	else
-	{
-		return(selfmatch);
-	}
+	return(selfmatch);
 }
