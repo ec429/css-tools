@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "tags.h"
 
@@ -139,9 +140,8 @@ int parse_selector(selector *, int);
 void tree_free(sel_elt * node);
 int treecmp(sel_elt * left, sel_elt * right);
 bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, char ** filename, int nrows, int nsels, bool *err);
-bool tree_match(sel_elt * curr, sel_elt * match);
-bool tree_match_real(sel_elt *curr, sel_elt *match);
-bool tree_match_2(sel_elt2 *sblg, sel_elt2 *mblg);
+bool tree_match(sel_elt * curr, sel_elt * match, int prep);
+bool tree_match_real(sel_elt *curr, sel_elt *match, int prep);
 bool tree_match_3(sel_elt3 *selfs, sel_elt3 *melfs);
 bool has_firstchild(sel_elt3 *melfs);
 
@@ -1311,15 +1311,18 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 			free(sparm);*err=true;return(false);
 		}
 		int inval=0;
-		if(num)
-		{
-			sscanf(cmp, "%d", &inval);
-		}
+		sscanf(cmp, "%d", &inval);
 		switch(wcmp)
 		{
 			case '=':
 				if(tree)
 				{
+					int prep=-1;
+					if(isdigit(*cmp))
+					{
+						prep=inval;
+						while(isdigit(*cmp)) cmp++;
+					}
 					// TODO: parse the tree outside the loop, rather than once for each sel in the list
 					selector tmatch;
 					tmatch.text=cmp;
@@ -1330,7 +1333,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 					}
 					sel_elt * curr=(sel_elt *)smatch;
 					sel_elt * match=tmatch.chain;
-					show=tree_match(curr, match);
+					show=tree_match(curr, match, prep);
 					tree_free(tmatch.chain);
 				}
 				else if(num)
@@ -1421,7 +1424,7 @@ bool test(int parmc, char *parmv[], selector * sort, int i, entry * entries, cha
 	return(show);
 }
 
-bool tree_match(sel_elt * curr, sel_elt * match)
+bool tree_match(sel_elt * curr, sel_elt * match, int prep)
 {
 	//fprintf(stderr, "tree_match(%p,%p)\n", curr, match);
 	if(curr)
@@ -1430,12 +1433,12 @@ bool tree_match(sel_elt * curr, sel_elt * match)
 		while(clast->next) clast=clast->next;
 		sel_elt * mlast=match;
 		while(mlast && mlast->next) mlast=mlast->next;
-		return tree_match_real(clast, mlast); // a match of NULL means prepension is completely acceptable - "match=" matches everything
+		return tree_match_real(clast, mlast, prep); // a match of NULL means prepension is completely acceptable - "match=" matches everything
 	}
 	else return(true); // * matches everything
 }
 
-bool tree_match_real(sel_elt *curr, sel_elt *match)
+bool tree_match_real(sel_elt *curr, sel_elt *match, int prep)
 {
 	//fprintf(stderr, "tree_match_real(%p,%p)\n", curr, match);
 	if(!curr) // * matches everything
@@ -1480,28 +1483,41 @@ bool tree_match_real(sel_elt *curr, sel_elt *match)
 		switch(curr->prev->nextrel)
 		{
 			case CHLD:
-				if(match->prev)
+				if(match && match->prev)
 				{
-					return(tree_match_real(curr->prev, match->prev));
+					return(tree_match_real(curr->prev, match->prev, prep));
+				}
+				else if(prep==-1)
+				{
+					return(true);
+				}
+				else if(prep==0)
+				{
+					return(false);
 				}
 				else
 				{
-					return(true); // TODO: when we have the prepension counter, test NZ and decrement
+					return(tree_match_real(curr->prev, match?match->prev:NULL, prep-1));
 				}
 			break;
-			case DESC: // At the moment, this always ends up TRUE, because with unlimited prepension, it can be a descendant of whatever you want it to be
-				if(false) // this "false" will become a test for "are prepension limits in force?"
+			case DESC: // with unlimited prepension, this would always end up TRUE anyway, because it can be a descendant of whatever you want it to be
+				if(prep==-1) // so we take a bit of a shortcut
 				{
-					while(match->prev)
+					return(true);
+				}
+				else
+				{
+					while(match && match->prev)
 					{
-						bool matched=tree_match_real(curr->prev, match->prev);
+						bool matched=tree_match_real(curr->prev, match->prev, prep);
 						if(matched)
 							return(true);
 						match=match->prev;
 					}
-					return(true);
+					if(prep==0)
+						return(false);
+					return(tree_match_real(curr->prev, NULL, prep-1));
 				}
-				return(true); // TODO: when we have the prepension counter, test NZ and decrement
 			break;
 			default:
 				if(daemonmode)

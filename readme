@@ -82,12 +82,12 @@ See the section "Implementation Status" below.
 Format of a tree-match, in something approximating BNF:
 	<tree-match>::=	<prepension>?<html-tag>?<property>*(<relation><tree-match>)?
 	<property>	::=	{<class>|<pclass>|<id>}
-	<relation>	::=	{>|+}
+	<relation>	::=	{>|\+}
 	<html-tag> any of the tags listed in tags.h
 	<class>		::=	\.<ident>
 	<pclass>	::=	:<ident>
 	<id>		::=	#<ident>
-	<prepension>::= <number>
+	<prepension>::= {\?|<number>}
 	<ident>		::=	<nmstart><nmchar>*
 	<nmstart>	::=	[_a-z]
 	<nmchar>	::=	[_a-z0-9-]
@@ -126,14 +126,14 @@ Remember also that you're not actually aiming to uniquely specify an element in 
 So if you just used match=.bar>a, this would also match the CSS selectors "h1 a" and "td>>a", neither of which match that element.  The 'most specific' match above describes everything CSS 'knows' about the element.
 The matcher is 'optimistic': it returns all the selectors which could conceivably describe the element - it assumes that you have told it the truth but not the whole truth.  The only exception to this is ID selectors; if you don't specify one, it assumes the element has no ID, rather than any ID.  To make the matcher optimistic about an element's ID, give an ID of "?" (which is not a valid ID in CSS2.1).  So the selector "p#bar" would be matched by "match=p#?" - and even "match=.foo>p#?" - but not "match=p".  Also, of course, if you specify a tag, that excludes any other tags; the same however does /not/ apply to classes and pclasses, which are not mutually exclusive.  "?" will force optimism on any selector, not just IDs.
 The matcher is aware of the meanings of at least some pclasses, so for instance it knows that "match=tr+tr" can't match the rule ":firstchild".
-The matcher also assumes ("prepension") that there exists an infinite string of elements outside the tree you have given; so for example "match=a" will match the selectors "div>p a" and "* * * * * * * * * * * * * * a".  If you want to suppress this behaviour, prepend the match with a number (since a <tree-match> conforming to the above grammar cannot begin with a digit) specifying how many elements may be prepended; for this purpose descendant selectors will only prepend a single element, as though they were child selectors; also sibling selectors will be considered not to prepend any elements.
+The matcher also assumes ("prepension") that there exists an infinite string of elements outside the tree you have given; so for example "match=a" will match the selectors "div>p a" and "* * * * * * * * * * * * * * a".  If you want to suppress this behaviour, prepend the match with a number (since a <tree-match> conforming to the above grammar cannot begin with a digit) specifying how many elements may be prepended; for this purpose descendant selectors will only prepend a single element, as though they were child selectors; also sibling selectors will be considered not to prepend any elements.  A prepension limit of "?" specifies infinite prepension, as in the default.
 To make the matcher pessimistic about classes or pclasses (or IDs, if they are set to be optimistic), specify an empty string for them; so "match=p." won't match the rule ".toc", but it will match the rules "div.toc>p" and "p:firstchild".  If you want to specify that an element has, say, the class "foo" /and no others/, use "match=.foo."; this will match "div>p.foo" but not "p" or "p.bar".
 An empty element is considered to be a universal match; it is /always/ matched optimistically, regardless of other settings; so "p>>div" will match "*>.foo:bar#baz>*" no matter what - and will match ".puddle:paddle#peddle>*>.foo:bar#baz>*" if prepension is permitted, because prepended elements are 'empty elements'.  Also, since every element must have a tag, if no tag is given for an element then tags will be matched optimistically, so ".toc>table" will match the rule "p>table" regardless of tag optimism settings.
 You can also set optimism/pessimism for an entire matcher (apart from prepension) in one go, by using either "matcho" or "matchp", or match0 through match7 to set the optimism bitmask where 4=id,2=class,1=pclass.  So matcho is match7, matchp is match0, and match is match3.  There is no point having an optimism setting for tags, since either a tag is given (in which case pessimism is implied) or no tag is given (in which case optimism is implied).
 So with all of these things included, the 'most specific' tree-match, which will match precisely those rules which apply to that link, becomes:
 	matchp=0html>body:first-child>div#main>h1:first-child.title+h2+p.toc>table:first-child>tr:first-child+tr>td:first-child.bar>a:first-child[href="#bar"]
 The matcher is case-sensitive.
-The default optimism and prepension settings should be alterable with some kind of option command (and cmdline options), but then we need something to mean "infinite" for prepension.
+The default optimism and prepension settings should be alterable with some kind of option command (and cmdline options).
 
 Implementation status:
-The matcher basically functions, now, except that prepension limits are not supported (ie. the matcher always assumes infinite prepension) and pessimism is forced (ie. the optimism settings are not supported and the default is matchp).
+The matcher basically functions, now, except that pessimism is forced (ie. the optimism settings are not supported and the default is matchp).
