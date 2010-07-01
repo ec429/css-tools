@@ -79,6 +79,7 @@ FILE *output;
 bool daemonmode=false; // are we talking to another process? -d to set
 int nwarnings=0,maxwarnings=10;
 bool wdtd=true;
+bool wquoteattr=true;
 
 int main(int argc, char *argv[])
 {
@@ -110,11 +111,13 @@ int main(int argc, char *argv[])
 		{
 			wdupfile=true;
 			wdtd=true;
+			wquoteattr=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
 			wdupfile=false;
 			wdtd=false;
+			wquoteattr=false;
 		}
 		else if(strcmp(argt, "-Wdupfile")==0)
 		{
@@ -131,6 +134,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-dtd")==0)
 		{
 			wdtd=false;
+		}
+		else if(strcmp(argt, "-Wquoteattr")==0)
+		{
+			wquoteattr=true;
+		}
+		else if(strcmp(argt, "-Wno-quoteattr")==0)
+		{
+			wquoteattr=false;
 		}
 		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -376,6 +387,7 @@ char * getl(char * prompt)
 	return(nlout);
 }
 
+// TODO on error we should ht_free(rv) and return(NULL), instead of return(rv)ing
 ht_el * htparse(char ** lines, int nlines, int * nels)
 {
 	*nels=0;
@@ -391,6 +403,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 	int no_dtd_w=0;
 	int parent=-1;
 	char *attr;
+	bool quot=false;
 	ht_el blank={-1, 0, NULL, -1, -1, -1, -1, -1}, htop=blank;
 	while(line<nlines)
 	{
@@ -477,9 +490,32 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						{
 							htop.tag=i;
 							if(*curr=='>')
-								state=0;
+							{
+								// element finished, add it to rv
+								(*nels)++;
+								ht_el * new=(ht_el *)realloc(rv, (*nels)*sizeof(ht_el));
+								if(new)
+								{
+									rv=new;
+									new[(*nels)-1]=htop;
+									parent=(*nels)-1;
+									state=0;
+									pos++;
+								}
+								else
+								{
+									fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+									fprintf(output, PMKLINE);
+									if(daemonmode)
+										printf(DPARSERR"out of memory\n", DPARSARG);
+									return(rv);
+								}
+							}
 							else
+							{
+								igwhite=true; // eat up whitespace until the attr starts
 								state=6;
+							}
 						}
 						else
 						{
@@ -553,6 +589,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					pos++;
 				break;
 				case 6: // attribute name; scanning for '='
+					igwhite=false;
 					if(*curr=='=')
 					{
 						attr=cstr;
@@ -560,14 +597,39 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						cstl=0;
 						state=7;
 					}
-					else if(*curr=='>') // can't have an attr without a value
+					else if(*curr=='>')
 					{
-						fprintf(output, PARSERR"\tMalformed attribute\n", PARSARG);
-						fprintf(output, PMKLINE);
-						if(daemonmode)
-							printf(DPARSERR"malformed attribute\n", DPARSARG);
-						if(cstr) free(cstr);
-						return(rv);
+						if(cstr) // can't have an attr without a value
+						{
+							fprintf(output, PARSERR"\tMalformed attribute\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"malformed attribute\n", DPARSARG);
+							if(cstr) free(cstr);
+							return(rv);
+						}
+						else
+						{
+							// element finished, add it to rv
+							(*nels)++;
+							ht_el * new=(ht_el *)realloc(rv, (*nels)*sizeof(ht_el));
+							if(new)
+							{
+								rv=new;
+								new[(*nels)-1]=htop;
+								parent=(*nels)-1;
+								state=0;
+								pos++;
+							}
+							else
+							{
+								fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+								fprintf(output, PMKLINE);
+								if(daemonmode)
+									printf(DPARSERR"out of memory\n", DPARSARG);
+								return(rv);
+							}
+						}
 					}
 					else
 					{
@@ -577,13 +639,110 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							fprintf(output, PMKLINE);
 							if(daemonmode)
 								printf(DPARSERR"out of memory\n", DPARSARG);
-							free(cstr);
+							if(cstr) free(cstr);
 							return(rv);
 						}
 					}
 					pos++;
 				break;
-				//case 7: // attribute value, check for "
+				case 7: // attribute value, check for "
+					if(*curr=='"')
+					{
+						quot=true;
+						pos++;
+					}
+					else
+					{
+						quot=false;
+						if(wquoteattr && (nwarnings++ < maxwarnings))
+						{
+							fprintf(output, PARSEWARN"\tUnquoted attribute value\n", PARSEWARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSEWARN"unquoted attribute value\n", DPARSEWARG);
+						}
+					}
+					state=8;
+				break;
+				case 8: // attribute value, scanning for quot?closing ":whitespace
+					if(*curr=='"')
+					{
+						if(quot)
+						{
+							htop.nattrs++;
+							ht_attr * new=(ht_attr *)realloc(htop.attrs, htop.nattrs*sizeof(ht_attr));
+							if(new)
+							{
+								htop.attrs=new;
+								new[htop.nattrs-1].name=attr;
+								new[htop.nattrs-1].value=cstr;
+								cstr=NULL;
+								cstl=0;
+								igwhite=true;
+								state=6;
+								pos++;
+							}
+							else
+							{
+								fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+								fprintf(output, PMKLINE);
+								if(daemonmode)
+									printf(DPARSERR"out of memory\n", DPARSARG);
+								if(attr) free(attr);
+								if(cstr) free(cstr);
+								return(rv);
+							}
+						}
+						else
+						{
+							fprintf(output, PARSERR"\t\" in unquoted attribute value\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"\" in unquoted attribute value\n", DPARSARG);
+							return(rv);
+						}
+					}
+					else if(!quot && strchr(" \t\r\f\n>", *curr))
+					{
+						htop.nattrs++;
+						ht_attr * new=(ht_attr *)realloc(htop.attrs, htop.nattrs*sizeof(ht_attr));
+						if(new)
+						{
+							htop.attrs=new;
+							new[htop.nattrs-1].name=attr;
+							new[htop.nattrs-1].value=cstr;
+							cstr=NULL;
+							cstl=0;
+							igwhite=true;
+							state=6;
+							if(*curr!='>')
+								pos++;
+						}
+						else
+						{
+							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"out of memory\n", DPARSARG);
+							if(attr) free(attr);
+							if(cstr) free(cstr);
+							return(rv);
+						}
+					}
+					else
+					{
+						if(push(&cstr, &cstl, *curr))
+						{
+							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"out of memory\n", DPARSARG);
+							if(cstr) free(cstr);
+							if(attr) free(attr);
+							return(rv);
+						}
+						pos++;
+					}
 				break;
 				default:
 					fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
@@ -594,7 +753,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 				break;
 			}
 		}
-		if(*curr=='\n') // handle newlines
+		if(*curr=='\n') // handle newlines TODO: catch instances of newlines occuring where whitespace is significant or disallowed (although css-tools *is not a validator*)
 		{
 			line++;
 			pos=0;
