@@ -81,6 +81,7 @@ bool trace=false; // for debugging, trace the parser's state and position
 int nwarnings=0,maxwarnings=10;
 bool wdtd=true;
 bool wquoteattr=true;
+bool wclose=true;
 
 int main(int argc, char *argv[])
 {
@@ -118,12 +119,14 @@ int main(int argc, char *argv[])
 			wdupfile=true;
 			wdtd=true;
 			wquoteattr=true;
+			wclose=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
 			wdupfile=false;
 			wdtd=false;
 			wquoteattr=false;
+			wclose=false;
 		}
 		else if(strcmp(argt, "-Wdupfile")==0)
 		{
@@ -148,6 +151,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-quoteattr")==0)
 		{
 			wquoteattr=false;
+		}
+		else if(strcmp(argt, "-Wclose")==0)
+		{
+			wclose=true;
+		}
+		else if(strcmp(argt, "-Wno-close")==0)
+		{
+			wclose=false;
 		}
 		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -330,8 +341,8 @@ char * fgetl(FILE *fp)
 	while(!feof(fp))
 	{
 		c=fgetc(fp);
-		if(c==EOF)
-			break;
+		if(c==EOF) // EOF without '\n' - we'd better put an '\n' in
+			c='\n';
 		if(c!=0)
 		{
 			lout[i++]=c;
@@ -690,7 +701,11 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						}
 						if(closer)
 						{
-							printf("notdone\n");
+							fprintf(output, PARSERR"\tAttributes not allowed in closing tags\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"attributes not allowed in closing tags\n", DPARSARG);
+							if(cstr) free(cstr);
 							return(rv);
 						}
 						else
@@ -702,7 +717,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							{
 								rv=new;
 								new[(*nels)-1]=htop;
-								if(!close) // for a closing tag, the parent is the same as it was before
+								if(!close) // for a self-closing tag, the parent is the same as it was before
 									parent=(*nels)-1;
 								state=0;
 							}
@@ -895,6 +910,12 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 			line++;
 			pos=0;
 		}
+	}
+	if((parent!=-1) && wclose && (nwarnings++ < maxwarnings))
+	{
+		fprintf(output, PARSEWARN"\tElement not closed at EOF: %s\n", PARSEWARG, tags[rv[parent].tag]);
+		if(daemonmode)
+			printf(DPARSEWARN"element not closed at EOF:\"%s\"\n", DPARSEWARG, tags[rv[parent].tag]);
 	}
 	return(rv);
 }
