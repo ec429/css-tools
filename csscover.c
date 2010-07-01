@@ -410,6 +410,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 	int parent=-1;
 	char *attr;
 	bool quot=false;
+	bool closer=false;
 	ht_el blank={-1, 0, NULL, -1, -1, -1, -1, -1}, htop=blank;
 	while(line<nlines)
 	{
@@ -426,6 +427,10 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 			{
 				case 0: // looking for a '<'
 					igwhite=true;
+					htop=blank;
+					closer=false;
+					cstr=NULL;
+					cstl=0;
 					if(*curr=='<')
 					{
 						state=1;
@@ -452,6 +457,8 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						state=2;
 					else
 					{
+						if(*curr=='/')
+							closer=true;
 						state=3;
 						if(wdtd && !dtds && !no_dtd_w)
 						{
@@ -462,7 +469,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						}
 					}
 					igwhite=false; // things we're interested in are delimited by whitespace
-					if(push(&cstr, &cstl, *curr))
+					if(!closer && push(&cstr, &cstl, *curr))
 					{
 						fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
 						fprintf(output, PMKLINE);
@@ -506,23 +513,56 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							htop.tag=i;
 							if(*curr=='>')
 							{
-								// element finished, add it to rv
-								(*nels)++;
-								ht_el * new=(ht_el *)realloc(rv, (*nels)*sizeof(ht_el));
-								if(new)
+								if(closer)
 								{
-									rv=new;
-									new[(*nels)-1]=htop;
-									parent=(*nels)-1;
+									if(parent>=0)
+									{
+										if(i==rv[parent].tag)
+										{
+											parent=rv[parent].par;
+										}
+										else
+										{
+											fprintf(output, PARSERR"\tIncorrect nesting or closed tag not open\n", PARSARG);
+											fprintf(output, PMKLINE);
+											if(daemonmode)
+												printf(DPARSERR"incorrect nesting\n", DPARSARG);
+											if(cstr) free(cstr);
+											return(rv);
+										}
+									}
+									else
+									{
+										fprintf(output, PARSERR"\tIncorrect nesting or closed tag not open\n", PARSARG);
+										fprintf(output, PMKLINE);
+										if(daemonmode)
+											printf(DPARSERR"incorrect nesting\n", DPARSARG);
+										if(cstr) free(cstr);
+										return(rv);
+									}
 									state=0;
 								}
 								else
 								{
-									fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
-									fprintf(output, PMKLINE);
-									if(daemonmode)
-										printf(DPARSERR"out of memory\n", DPARSARG);
-									return(rv);
+									// element finished, add it to rv
+									(*nels)++;
+									ht_el * new=(ht_el *)realloc(rv, (*nels)*sizeof(ht_el));
+									if(new)
+									{
+										rv=new;
+										new[(*nels)-1]=htop;
+										parent=(*nels)-1;
+										state=0;
+									}
+									else
+									{
+										fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+										fprintf(output, PMKLINE);
+										if(daemonmode)
+											printf(DPARSERR"out of memory\n", DPARSARG);
+										if(cstr) free(cstr);
+										return(rv);
+									}
 								}
 							}
 							else
@@ -537,6 +577,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							fprintf(output, PMKLINE);
 							if(daemonmode)
 								printf(DPARSERR"unrecognised element name\n", DPARSARG);
+							if(cstr) free(cstr);
 							return(rv);
 						}
 						if(cstr) free(cstr);
@@ -613,13 +654,28 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					}
 					else if(*curr=='>')
 					{
+						bool close=false;
 						if(cstr) // can't have an attr without a value
 						{
-							fprintf(output, PARSERR"\tMalformed attribute\n", PARSARG);
-							fprintf(output, PMKLINE);
-							if(daemonmode)
-								printf(DPARSERR"malformed attribute\n", DPARSARG);
-							if(cstr) free(cstr);
+							if(strcmp(cstr, "/")==0) // '/>' closes a tag; it's not an attr
+							{
+								free(cstr);
+								cstr=NULL;
+								close=true;
+							}
+							else
+							{
+								fprintf(output, PARSERR"\tMalformed attribute\n", PARSARG);
+								fprintf(output, PMKLINE);
+								if(daemonmode)
+									printf(DPARSERR"malformed attribute\n", DPARSARG);
+								if(cstr) free(cstr);
+								return(rv);
+							}
+						}
+						if(closer)
+						{
+							printf("notdone\n");
 							return(rv);
 						}
 						else
@@ -631,7 +687,8 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							{
 								rv=new;
 								new[(*nels)-1]=htop;
-								parent=(*nels)-1;
+								if(!close) // for a closing tag, the parent is the same as it was before
+									parent=(*nels)-1;
 								state=0;
 							}
 							else
