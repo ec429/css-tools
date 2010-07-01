@@ -42,7 +42,7 @@ typedef struct
 	int file; // not filled in by htparse, but other code might find it useful to have somewhere to store it
 	int line; // line and column of the '<' that starts the opening-tag
 	int col;
-	int sib; // offset of adjacent elder sibling into ht_el array
+	int sib; // offset of adjacent elder sibling into ht_el array; -1 means :first-child
 	int par; // offset of parent into ht_el array
 }
 ht_el;
@@ -77,6 +77,7 @@ int push(char **string, int *length, char c);
 // global vars
 FILE *output;
 bool daemonmode=false; // are we talking to another process? -d to set
+bool trace=false; // for debugging, trace the parser's state and position
 int nwarnings=0,maxwarnings=10;
 bool wdtd=true;
 bool wquoteattr=true;
@@ -106,6 +107,11 @@ int main(int argc, char *argv[])
 			output=stderr;
 			fprintf(output, "csscover: Daemon mode is active.\n");
 			printf("CSSCOVER:\"%s\"\n", VERSION);
+		}
+		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
+		{
+			trace=true;
+			fprintf(output, "cssi: Tracing on stderr\n");
 		}
 		else if(strcmp(argt, "-Wall")==0) // TODO:generically handle warnings, so I don't have to remember to add each new warning to -Wall and -Wno-all
 		{
@@ -408,6 +414,8 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 	while(line<nlines)
 	{
 		curr=&lines[line][pos];
+		if(trace)
+			fprintf(stderr, "%d\t%d:%d\t%hhu\t'%c'\n", state, line+1, pos+1, *curr, *curr);
 		if(igwhite && strchr(" \t\r\f\n", *curr))
 		{
 			pos++;
@@ -426,8 +434,15 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						htop.par=parent;
 						if(htop.par>=0)
 						{
-							printf("notdone\n");
-							return(rv);
+							int i;
+							for(i=(*nels)-1;i>=0;i--)
+							{
+								if(rv[i].par==parent)
+								{
+									htop.sib=i;
+									break;
+								}
+							}
 						}
 					}
 					pos++;
@@ -676,6 +691,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 								htop.attrs=new;
 								new[htop.nattrs-1].name=attr;
 								new[htop.nattrs-1].value=cstr;
+								attr=NULL;
 								cstr=NULL;
 								cstl=0;
 								igwhite=true;
@@ -711,6 +727,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 							htop.attrs=new;
 							new[htop.nattrs-1].name=attr;
 							new[htop.nattrs-1].value=cstr;
+							attr=NULL;
 							cstr=NULL;
 							cstl=0;
 							igwhite=true;
