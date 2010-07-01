@@ -1,6 +1,12 @@
 css-tools - make sense of your CSS
 ===Documentation===
 
+==Note==
+It is important to remember that *none of the css-tools is a validator*.  Where a css-tool includes a parser, the parser may fail in either of two ways.
+(i) it may reject or misinterpret a valid construct.  Such a failure is a bug to be fixed and should be reported as such.
+(ii) it may accept an invalid construct.  While undesirable, this behaviour is not a bug, rather it is the lack of a feature (the feature concerned being 'rejection of invalid construct X').  Thus, this failure should be reported as a feature request, if at all.
+You should always validate your code prior to deployment, and you should do so with proper validation tools (such as the W3C HTML and XML online validators); "css-tools parsed it with no errors" is simply not enough.
+
 ==CSSI==
 
 	cssi [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]
