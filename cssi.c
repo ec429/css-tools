@@ -335,7 +335,7 @@ int main(int argc, char *argv[])
 		{
 			char *curr=mfile[line]+pos;
 			if(trace)
-				fprintf(output, "%d\t%d:%d\t%hhu\t'%c'\n", state, line+1, pos+1, *curr, *curr);
+				fprintf(stderr, "%d\t%d:%d\t%hhu\t'%c'\n", state, line+1, pos+1, *curr, *curr);
 			if(*curr==0)
 			{
 				if(line==nlines-1)
