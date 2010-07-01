@@ -482,17 +482,17 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					pos++;
 				break;
 				case 2: // SGML/XML <!declaration>
-					if(strchr(" [", *curr))
-					{
-						state=4;
-					}
-					else if(cstr && (strcmp("!--", cstr)==0)) // technically this is wrong, we should have a separate parser for <!declarations> which interprets -- as comment delimiter; but almost all major browsers and most HTML authors are lazy about correct SGML/XML comment syntax, so we will be too - after all, css-tools is not a validator
+					if(cstr && (strcmp("!--", cstr)==0)) // technically this is wrong, we should have a separate parser for <!declarations> which interprets -- as comment delimiter; but almost all major browsers and most HTML authors are lazy about correct SGML/XML comment syntax, so we will be too - after all, css-tools is not a validator
 					{
 						state=9;
 						free(cstr);
 						cstr=NULL;
 						cstl=0;
 						pos++;
+					}
+					else if(strchr(" [", *curr))
+					{
+						state=4;
 					}
 					else
 					{
@@ -654,8 +654,14 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 				break;
 				case 6: // attribute name; scanning for '=' TODO: whitespace is permitted both sides of the '='
 					igwhite=false;
-					if(*curr=='=')
+					if(strchr(" \t\r\f\n", *curr))
 					{
+						igwhite=true;
+						state=12;
+					}
+					else if(*curr=='=')
+					{
+						igwhite=true;
 						attr=cstr;
 						cstr=NULL;
 						cstl=0;
@@ -725,6 +731,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					pos++;
 				break;
 				case 7: // attribute value, check for "
+					igwhite=false;
 					if(*curr=='"')
 					{
 						quot=true;
@@ -744,7 +751,17 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					state=8;
 				break;
 				case 8: // attribute value, scanning for quot?closing ":whitespace
-					if(*curr=='"')
+					if(!quot && strchr(" \t\r\f\n", *curr))
+					{
+						fprintf(output, PARSERR"\tWhitespace in unquoted attribute value\n", PARSARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSERR"whitespace in unquoted attribute value\n", DPARSARG);
+						if(cstr) free(cstr);
+						if(attr) free(attr);
+						return(rv);
+					}
+					else if(*curr=='"')
 					{
 						if(quot)
 						{
@@ -843,6 +860,26 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					else
 						state=9;
 					pos++;
+				break;
+				case 12:
+					if(*curr=='=')
+					{
+						igwhite=true;
+						attr=cstr;
+						cstr=NULL;
+						cstl=0;
+						state=7;
+						pos++;
+					}
+					else
+					{
+						fprintf(output, PARSERR"\tWhitespace in attribute name\n", PARSARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSERR"whitespace in attribute name\n", DPARSARG);
+						if(cstr) free(cstr);
+						return(rv);
+					}
 				break;
 				default:
 					fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
