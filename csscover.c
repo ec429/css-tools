@@ -50,6 +50,20 @@ ht_el;
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]"
 
+#define PARSERR		"csscover: Error (Parser, state %d) at %d:%d\n"
+#define PARSARG		state, line+1, pos+1
+
+#define PARSEWARN	"csscover: warning: (Parser, state %d) at %d:%d\n"
+#define PARSEWARG	state, line+1, pos+1
+
+#define DPARSERR	"ERR:EPARSE:%d,%d.%d:"
+#define DPARSARG	state, line, pos /* note, this is 0-based */
+
+#define DPARSEWARN	"WARN:WPARSE:%d,%d.%d:"
+#define DPARSEWARG	state, line, pos /* note, this is 0-based */
+
+#define PMKLINE		"%.*s/* <- */%s\n", pos+1, lines[line], lines[line]+pos+1
+
 // helper fn macros
 #define max(a,b)	((a)>(b)?(a):(b))
 #define min(a,b)	((a)<(b)?(a):(b))
@@ -140,9 +154,6 @@ int main(int argc, char *argv[])
 	
 	// read files and parse them find out what css files they need
 	// we'll store all the parse results in RAM because we'll want to read them again later
-	fprintf(output, "csscover: reading input files\n");
-	if(daemonmode)
-		printf("READ\n");
 	char ***mfile=(char ***)malloc(nfiles*sizeof(char**));
 	if(!mfile)
 	{
@@ -158,6 +169,9 @@ int main(int argc, char *argv[])
 	int nels[nfiles];
 	for(file=0;file<nfiles;file++)
 	{
+		fprintf(output, "csscover: reading %s\n", filename[file]);
+		if(daemonmode)
+			printf("READ:%s\n", filename[file]);
 		mfile[file]=NULL;
 		nlines[file]=0;
 		html[file]=NULL;
@@ -216,7 +230,7 @@ int main(int argc, char *argv[])
 			nlines[file]--;
 			free(mfile[file][nlines[file]]);
 		}
-		html[file] = htparse(mfile[file], nlines[file], &nels[file])
+		html[file] = htparse(mfile[file], nlines[file], &nels[file]);
 		// TODO: search it for CSS links
 		skip:
 		;
@@ -354,5 +368,36 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 {
 	*nels=0;
 	ht_el * rv=NULL;
-	
+	int line=0;
+	int pos=0;
+	int state=0;
+	bool igwhite=true;
+	char *curr;
+	while(line<nlines)
+	{
+		curr=&lines[line][pos];
+		if(igwhite && strchr(" \t\r\f\n", *curr))
+		{
+			pos++;
+		}
+		else
+		{
+			switch(state)
+			{
+				default:
+					fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
+					fprintf(output, PMKLINE);
+					if(daemonmode)
+						printf(DPARSERR"no such state\n", DPARSARG);
+					return(rv);
+				break;
+			}
+		}
+		if(*curr=='\n')
+		{
+			line++;
+			pos=0;
+		}
+	}
+	return(rv);
 }
