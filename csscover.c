@@ -27,6 +27,26 @@
 
 #include "tags.h"
 
+typedef struct
+{
+	char * name;
+	char * value;
+}
+ht_attr;
+
+typedef struct
+{
+	int tag; // offset into tags[] (tags.h)
+	int nattrs;
+	ht_attr * attrs;
+	int file; // not filled in by htparse, but other code might find it useful to have somewhere to store it
+	int line; // line and column of the '<' that starts the opening-tag
+	int col;
+	int sib; // offset of adjacent elder sibling into ht_el array
+	int par; // offset of parent into ht_el array
+}
+ht_el;
+
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]"
 
@@ -37,6 +57,7 @@
 // function protos
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
 char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
+ht_el * htparse(char ** lines, int nlines, int * nels);
 
 // global vars
 FILE *output;
@@ -117,8 +138,8 @@ int main(int argc, char *argv[])
 		return(1);
 	}
 	
-	// read files and find out what css files they need
-	// we'll store all the files in RAM because we'll want to read them again later
+	// read files and parse them find out what css files they need
+	// we'll store all the parse results in RAM because we'll want to read them again later
 	fprintf(output, "csscover: reading input files\n");
 	if(daemonmode)
 		printf("READ\n");
@@ -131,12 +152,16 @@ int main(int argc, char *argv[])
 			printf("ERR:EMEM\n");
 		return(2);
 	}
+	ht_el **html=(ht_el **)malloc(nfiles*sizeof(ht_el *));
 	int file;
 	int nlines[nfiles];
+	int nels[nfiles];
 	for(file=0;file<nfiles;file++)
 	{
 		mfile[file]=NULL;
 		nlines[file]=0;
+		html[file]=NULL;
+		nels[file]=0;
 		int j;
 		for(j=0;j<file;j++)
 		{
@@ -144,7 +169,7 @@ int main(int argc, char *argv[])
 			{
 				if(wdupfile && (nwarnings++<maxwarnings))
 				{
-					fprintf(output, "cssi: warning: Duplicate file in set: %s\n", filename[file]);
+					fprintf(output, "csscover: warning: Duplicate file in set: %s\n", filename[file]);
 					if(daemonmode)
 						printf("WARN:WDUPFILE:\"%s\"\n", filename[file]);
 				}
@@ -191,13 +216,15 @@ int main(int argc, char *argv[])
 			nlines[file]--;
 			free(mfile[file][nlines[file]]);
 		}
+		html[file] = htparse(mfile[file], nlines[file], &nels[file])
+		// TODO: search it for CSS links
 		skip:
 		;
 	}
 	fprintf(output, "csscover: input files read\n");
 	if(daemonmode)
 		printf("READ*\n");
-	
+		
 	int wp[2],rp[2],e;
 	int ww,rr;
 	if((e=pipe(wp)))
@@ -321,4 +348,11 @@ char * getl(char * prompt)
 		return(lout); // it doesn't really matter (assuming realloc is a decent implementation and hasn't nuked the original pointer), we'll just have to temporarily waste a bit of memory
 	}
 	return(nlout);
+}
+
+ht_el * htparse(char ** lines, int nlines, int * nels)
+{
+	*nels=0;
+	ht_el * rv=NULL;
+	
 }
