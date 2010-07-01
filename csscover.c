@@ -515,7 +515,6 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 									new[(*nels)-1]=htop;
 									parent=(*nels)-1;
 									state=0;
-									pos++;
 								}
 								else
 								{
@@ -634,7 +633,6 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 								new[(*nels)-1]=htop;
 								parent=(*nels)-1;
 								state=0;
-								pos++;
 							}
 							else
 							{
