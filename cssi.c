@@ -279,9 +279,9 @@ int main(int argc, char *argv[])
 			fp=fopen(filename[i], "r");
 		if(!fp)
 		{
-			fprintf(output, "cssi: Error: Failed to open %s for reading!\n", i==nfiles?"<stdin>":filename[i]);
+			fprintf(output, "cssi: Error: Failed to open %s for reading!\n", filename[i]);
 			if(daemonmode)
-				printf("ERR:ECANTREAD:\"%s\"\n", i==nfiles?"<stdin>":filename[i]);
+				printf("ERR:ECANTREAD:\"%s\"\n", filename[i]);
 			return(1);
 		}
 		char ** mfile=NULL;

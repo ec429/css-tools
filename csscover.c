@@ -22,15 +22,21 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include "tags.h"
 
 // Interface strings and arguments for [f]printf()
-#define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <filename> [...]"
+#define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]"
 
 // helper fn macros
 #define max(a,b)	((a)>(b)?(a):(b))
 #define min(a,b)	((a)<(b)?(a):(b))
+
+// function protos
+char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
+char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
 
 // global vars
 FILE *output;
@@ -39,10 +45,14 @@ bool daemonmode=false; // are we talking to another process? -d to set
 int main(int argc, char *argv[])
 {
 	output=stdout;
-	int nfiles=0;
-	char ** filename=NULL; // files to load
+	int nfiles=0,cfiles=0;
+	char ** filename=NULL; // HTML files to load
+	char ** cssfiles=NULL; // CSS files to load
 	char *importpath="";
-	char ** assoc_ipath=NULL;
+	char ** h_assoc_ipath=NULL;
+	char ** c_assoc_ipath=NULL;
+	bool wdupfile=true;
+	int nwarnings=0,maxwarnings=10;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
@@ -58,6 +68,26 @@ int main(int argc, char *argv[])
 			output=stderr;
 			fprintf(output, "csscover: Daemon mode is active.\n");
 			printf("CSSCOVER:\"%s\"\n", VERSION);
+		}
+		else if(strcmp(argt, "-Wall")==0) // TODO:generically handle warnings, so I don't have to remember to add each new warning to -Wall and -Wno-all
+		{
+			wdupfile=true;
+		}
+		else if(strcmp(argt, "-Wno-all")==0)
+		{
+			wdupfile=false;
+		}
+		else if(strcmp(argt, "-Wdupfile")==0)
+		{
+			wdupfile=true;
+		}
+		else if(strcmp(argt, "-Wno-dupfile")==0)
+		{
+			wdupfile=false;
+		}
+		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
+		{
+			sscanf(strchr(argt, '=')+1, "%d", &maxwarnings);
 		}
 		else if(strncmp(argt, "-I=", 3)==0)
 		{
@@ -75,8 +105,8 @@ int main(int argc, char *argv[])
 			nfiles++;
 			filename=(char **)realloc(filename, nfiles*sizeof(char *));
 			filename[nfiles-1]=argt;
-			assoc_ipath=(char **)realloc(assoc_ipath, nfiles*sizeof(char *));
-			assoc_ipath[nfiles-1]=importpath;
+			h_assoc_ipath=(char **)realloc(h_assoc_ipath, nfiles*sizeof(char *));
+			h_assoc_ipath[nfiles-1]=importpath;
 		}
 	}
 	if(filename==NULL)
@@ -86,5 +116,209 @@ int main(int argc, char *argv[])
 			printf("ERR:ENOFILE\n");
 		return(1);
 	}
+	
+	// read files and find out what css files they need
+	// we'll store all the files in RAM because we'll want to read them again later
+	fprintf(output, "csscover: reading input files\n");
+	if(daemonmode)
+		printf("READ\n");
+	char ***mfile=(char ***)malloc(nfiles*sizeof(char**));
+	if(!mfile)
+	{
+		fprintf(output, "csscover: Error: Failed to alloc mem for input files.\n");
+		perror("malloc");
+		if(daemonmode)
+			printf("ERR:EMEM\n");
+		return(2);
+	}
+	int file;
+	int nlines[nfiles];
+	for(file=0;file<nfiles;file++)
+	{
+		mfile[file]=NULL;
+		nlines[file]=0;
+		int j;
+		for(j=0;j<file;j++)
+		{
+			if(strcmp(filename[file], filename[j])==0)
+			{
+				if(wdupfile && (nwarnings++<maxwarnings))
+				{
+					fprintf(output, "cssi: warning: Duplicate file in set: %s\n", filename[file]);
+					if(daemonmode)
+						printf("WARN:WDUPFILE:\"%s\"\n", filename[file]);
+				}
+				goto skip; // there is *nothing* *wrong* with the occasional goto
+			}
+		}
+		FILE *fp;
+		if(strcmp(filename[file], "-")==0)
+			fp=stdin;
+		else
+			fp=fopen(filename[file], "r");
+		if(!fp)
+		{
+			fprintf(output, "csscover: Error: Failed to open %s for reading!\n", filename[file]);
+			if(daemonmode)
+				printf("ERR:ECANTREAD:\"%s\"\n", filename[file]);
+			return(2);
+		}
+		while(!feof(fp))
+		{
+			nlines[file]++;
+			mfile[file]=(char **)realloc(mfile[file], nlines[file]*sizeof(char *));
+			if(!mfile[file])
+			{
+				fprintf(output, "csscover: Error: Failed to alloc mem for input file.\n");
+				perror("realloc");
+				if(daemonmode)
+					printf("ERR:EMEM\n");
+				return(2);
+			}
+			mfile[file][nlines[file]-1]=fgetl(fp);
+			if(!mfile[file][nlines[file]-1])
+			{
+				fprintf(output, "csscover: Error: Failed to alloc mem for input file.\n");
+				perror("malloc/realloc");
+				if(daemonmode)
+					printf("ERR:EMEM\n");
+				return(2);
+			}
+		}
+		fclose(fp);
+		while(mfile[file][nlines[file]-1][0]==0)
+		{
+			nlines[file]--;
+			free(mfile[file][nlines[file]]);
+		}
+		skip:
+		;
+	}
+	fprintf(output, "csscover: input files read\n");
+	if(daemonmode)
+		printf("READ*\n");
+	
+	int wp[2],rp[2],e;
+	int ww,rr;
+	if((e=pipe(wp)))
+	{
+		fprintf(output, "csscover: Error: Failed to create pipe: %s\n", strerror(errno));
+		if(daemonmode)
+			printf("ERR:EPIPE\n");
+		return(2);
+	}
+	if((e=pipe(rp)))
+	{
+		fprintf(output, "csscover: Error: Failed to create pipe: %s\n", strerror(errno));
+		if(daemonmode)
+			printf("ERR:EPIPE\n");
+		return(2);
+	}
+	int pid=fork();
+	switch(pid)
+	{
+		case -1: // failure
+			fprintf(output, "csscover: Error: failed to fork cssi: %s\n", strerror(errno));
+			if(daemonmode)
+				printf("ERR:EFORK\n");
+		break;
+		case 0: // parent
+			ww=wp[1];close(wp[0]);
+			rr=rp[0];close(rp[1]);
+		break;
+		default: // child
+			ww=rp[1];close(rp[0]);
+			rr=wp[0];close(wp[1]);
+			if((e=dup2(ww, STDOUT_FILENO)))
+			{
+				fprintf(output, "csscover.child: Error: Failed to redirect stdout with dup2: %s\n", strerror(errno));
+				if(daemonmode)
+					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+				return(2);
+			}
+			if((e=dup2(rr, STDIN_FILENO)))
+			{
+				fprintf(output, "csscover.child: Error: Failed to redirect stdin with dup2: %s\n", strerror(errno));
+				if(daemonmode)
+					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+				return(2);
+			}
+			// TODO exec
+			return(255);
+		break;
+	}
 	return(0);
+}
+
+/* WARNING, this fgetl() is not like my usual getl(); this one keeps the \n */
+// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
+char * fgetl(FILE *fp)
+{
+	char * lout = (char *)malloc(81);
+	int i=0;
+	signed int c;
+	while(!feof(fp))
+	{
+		c=fgetc(fp);
+		if(c==EOF)
+			break;
+		if(c!=0)
+		{
+			lout[i++]=c;
+			if((i%80)==0)
+			{
+				if((lout=(char *)realloc(lout, i+81))==NULL)
+				{
+					printf("\nNot enough memory to store input!\n");
+					free(lout);
+					return(NULL);
+				}
+			}
+		}
+		if(c=='\n') // we do want to keep them this time
+			break;
+	}
+	lout[i]=0;
+	char *nlout=(char *)realloc(lout, i+1);
+	if(nlout==NULL)
+	{
+		return(lout); // it doesn't really matter (assuming realloc is a decent implementation and hasn't nuked the original pointer), we'll just have to temporarily waste a bit of memory
+	}
+	return(nlout);
+}
+
+char * getl(char * prompt)
+{
+	printf("%s", prompt);
+	fflush(stdout);
+	// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
+	char * lout = (char *)malloc(81);
+	int i=0;
+	char c;
+	while(1)
+	{
+		c = getchar();
+		if (c == 10)
+			break;
+		if (c != 0)
+		{
+			lout[i++]=c;
+			if ((i%80) == 0)
+			{
+				if ((lout = (char *)realloc(lout, i+81))==NULL)
+				{
+					printf("\nNot enough memory to store input!\n");
+					free(lout);
+					return(NULL);
+				}
+			}
+		}
+	}
+	lout[i]=0;
+	char *nlout=(char *)realloc(lout, i+1);
+	if(nlout==NULL)
+	{
+		return(lout); // it doesn't really matter (assuming realloc is a decent implementation and hasn't nuked the original pointer), we'll just have to temporarily waste a bit of memory
+	}
+	return(nlout);
 }

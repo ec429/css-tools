@@ -36,7 +36,7 @@ dist: all
 	rm -r css-tools
 
 all-w: cssi.exe csscover.exe
-git describe --tags
+	git describe --tags
 
 cssi.exe: cssi.c tags.h
 	$(CCW) $(CFLAGSW) -o cssi.exe cssi.c -DVERSION=\"$(VERSION)\"
