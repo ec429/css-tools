@@ -50,8 +50,8 @@ ht_el;
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]"
 
-#define PARSERR		"csscover: Error (Parser, state %d) at %d:%d\n"
-#define PARSARG		state, line+1, pos+1
+#define PARSERR		"csscover: Error (Parser, state %d) at %d:%d, cstr '%s'\n"
+#define PARSARG		state, line+1, pos+1, cstr
 
 #define PARSEWARN	"csscover: warning: (Parser, state %d) at %d:%d\n"
 #define PARSEWARG	state, line+1, pos+1
@@ -72,10 +72,13 @@ ht_el;
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
 char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
 ht_el * htparse(char ** lines, int nlines, int * nels);
+int push(char **string, int *length, char c);
 
 // global vars
 FILE *output;
 bool daemonmode=false; // are we talking to another process? -d to set
+int nwarnings=0,maxwarnings=10;
+bool wdtd=true;
 
 int main(int argc, char *argv[])
 {
@@ -87,7 +90,6 @@ int main(int argc, char *argv[])
 	char ** h_assoc_ipath=NULL;
 	char ** c_assoc_ipath=NULL;
 	bool wdupfile=true;
-	int nwarnings=0,maxwarnings=10;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
@@ -107,10 +109,12 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wall")==0) // TODO:generically handle warnings, so I don't have to remember to add each new warning to -Wall and -Wno-all
 		{
 			wdupfile=true;
+			wdtd=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
 			wdupfile=false;
+			wdtd=false;
 		}
 		else if(strcmp(argt, "-Wdupfile")==0)
 		{
@@ -119,6 +123,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-dupfile")==0)
 		{
 			wdupfile=false;
+		}
+		else if(strcmp(argt, "-Wdtd")==0)
+		{
+			wdtd=true;
+		}
+		else if(strcmp(argt, "-Wno-dtd")==0)
+		{
+			wdtd=false;
 		}
 		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -373,6 +385,13 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 	int state=0;
 	bool igwhite=true;
 	char *curr;
+	char *cstr=NULL;
+	int cstl=0;
+	int dtds=0;
+	int no_dtd_w=0;
+	int parent=-1;
+	char *attr;
+	ht_el blank={-1, 0, NULL, -1, -1, -1, -1, -1}, htop=blank;
 	while(line<nlines)
 	{
 		curr=&lines[line][pos];
@@ -384,6 +403,188 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 		{
 			switch(state)
 			{
+				case 0: // looking for a '<'
+					igwhite=true;
+					if(*curr=='<')
+					{
+						state=1;
+						htop.line=line;
+						htop.col=pos;
+						htop.par=parent;
+						if(htop.par>=0)
+						{
+							printf("notdone\n");
+							return(rv);
+						}
+					}
+					pos++;
+				break;
+				case 1: // check for '<!' TODO: and '</'
+					if(*curr=='!')
+						state=2;
+					else
+					{
+						state=3;
+						if(wdtd && !dtds && !no_dtd_w)
+						{
+							fprintf(output, PARSEWARN"\tNo <!DOCTYPE> declared or not first element\n", PARSEWARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSEWARN"no <!DOCTYPE> or not first element\n", DPARSEWARG);
+						}
+					}
+					igwhite=false; // things we're interested in are delimited by whitespace
+					if(push(&cstr, &cstl, *curr))
+					{
+						fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSERR"out of memory\n", DPARSARG);
+						if(cstr) free(cstr);
+						return(rv);
+					}
+					pos++;
+				break;
+				case 2: // SGML/XML <!declaration>
+					if(strchr(" [", *curr))
+					{
+						state=4;
+					}
+					else
+					{
+						if(push(&cstr, &cstl, *curr))
+						{
+							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"out of memory\n", DPARSARG);
+							if(cstr) free(cstr);
+							return(rv);
+						}
+						pos++;
+					}
+				break;
+				case 3:
+					if(strchr(" >", *curr))
+					{
+						int i;
+						for(i=0;i<ntags;i++)
+						{
+							if(strcmp(cstr, tags[i])==0)
+								break;
+						}
+						if(i<ntags)
+						{
+							htop.tag=i;
+							if(*curr=='>')
+								state=0;
+							else
+								state=6;
+						}
+						else
+						{
+							fprintf(output, PARSERR"\tUnrecognised element name\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"unrecognised element name\n", DPARSARG);
+							return(rv);
+						}
+						if(cstr) free(cstr);
+						cstr=NULL;
+						cstl=0;
+					}
+					else
+					{
+						if(push(&cstr, &cstl, *curr))
+						{
+							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"out of memory\n", DPARSARG);
+							if(cstr) free(cstr);
+							return(rv);
+						}
+					}
+					pos++;
+				break;
+				case 4:
+					if(strcmp(cstr, "!DOCTYPE")==0)
+					{
+						// We ignore <!DOCTYPE> because our parser isn't clever enough to care - it just assumes XHTML and doesn't validate
+						state=5;
+					}
+					else
+					{
+						fprintf(output, PARSERR"\tUnrecognised <!declaration>\n", PARSARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSERR"unrecognised <!declaration>\n", DPARSARG);
+						return(rv);
+						if(cstr) free(cstr);
+						cstr=NULL;
+						cstl=0;
+					}
+				break;
+				case 5:
+					// We also assume that the document has an external DTD, so we can just scan for a '>'
+					if(*curr=='>')
+					{
+						if((dtds==1) && wdtd && (nwarnings++ < maxwarnings))
+						{
+							fprintf(output, PARSEWARN"\tMultiple <!DOCTYPE> declarations\n", PARSEWARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSEWARN"multiple <!DOCTYPE>\n", DPARSEWARG);
+						}
+						if(cstr) free(cstr);
+						cstr=NULL;
+						cstl=0;
+						dtds++;
+						state=0;
+					}
+					// But just in case, if we hit a '[' we throw a warning, -Wdtd
+					if((*curr=='[') && wdtd && (nwarnings++ < maxwarnings))
+					{
+						fprintf(output, PARSEWARN"\t<!DOCTYPE> contains [, may be internal\n", PARSEWARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSEWARN"<!DOCTYPE> contains [, may be internal\n", DPARSEWARG);
+					}
+					pos++;
+				break;
+				case 6: // attribute name; scanning for '='
+					if(*curr=='=')
+					{
+						attr=cstr;
+						cstr=NULL;
+						cstl=0;
+						state=7;
+					}
+					else if(*curr=='>') // can't have an attr without a value
+					{
+						fprintf(output, PARSERR"\tMalformed attribute\n", PARSARG);
+						fprintf(output, PMKLINE);
+						if(daemonmode)
+							printf(DPARSERR"malformed attribute\n", DPARSARG);
+						if(cstr) free(cstr);
+						return(rv);
+					}
+					else
+					{
+						if(push(&cstr, &cstl, *curr))
+						{
+							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSERR"out of memory\n", DPARSARG);
+							free(cstr);
+							return(rv);
+						}
+					}
+					pos++;
+				break;
+				//case 7: // attribute value, check for "
+				break;
 				default:
 					fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
 					fprintf(output, PMKLINE);
@@ -393,11 +594,24 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 				break;
 			}
 		}
-		if(*curr=='\n')
+		if(*curr=='\n') // handle newlines
 		{
 			line++;
 			pos=0;
 		}
 	}
 	return(rv);
+}
+
+int push(char **string, int *length, char c)
+{
+	char *new=(char *)realloc(*string, (*length)+2);
+	if(new)
+	{
+		*string=new;
+		new[(*length)++]=c;
+		new[(*length)]=0;
+		return(0);
+	}
+	return(1);
 }
