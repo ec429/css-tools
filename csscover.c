@@ -459,14 +459,15 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					{
 						if(*curr=='/')
 							closer=true;
-						state=3;
-						if(wdtd && !dtds && !no_dtd_w)
+						if(wdtd && (dtds==0) && !no_dtd_w)
 						{
 							fprintf(output, PARSEWARN"\tNo <!DOCTYPE> declared or not first element\n", PARSEWARG);
 							fprintf(output, PMKLINE);
 							if(daemonmode)
 								printf(DPARSEWARN"no <!DOCTYPE> or not first element\n", DPARSEWARG);
+							no_dtd_w=true;
 						}
+						state=3;
 					}
 					igwhite=false; // things we're interested in are delimited by whitespace
 					if(!closer && push(&cstr, &cstl, *curr))
@@ -484,6 +485,14 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					if(strchr(" [", *curr))
 					{
 						state=4;
+					}
+					else if(cstr && (strcmp("!--", cstr)==0)) // technically this is wrong, we should have a separate parser for <!declarations> which interprets -- as comment delimiter; but almost all major browsers and most HTML authors are lazy about correct SGML/XML comment syntax, so we will be too - after all, css-tools is not a validator
+					{
+						state=9;
+						free(cstr);
+						cstr=NULL;
+						cstl=0;
+						pos++;
 					}
 					else
 					{
@@ -643,7 +652,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					}
 					pos++;
 				break;
-				case 6: // attribute name; scanning for '='
+				case 6: // attribute name; scanning for '=' TODO: whitespace is permitted both sides of the '='
 					igwhite=false;
 					if(*curr=='=')
 					{
@@ -815,6 +824,25 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						}
 						pos++;
 					}
+				break;
+				case 9: // states 9,10,11 are doing lazy & (technically) incorrect comment handling
+					if(*curr=='-')
+						state=10;
+					pos++;
+				break;
+				case 10:
+					if(*curr=='-')
+						state=11;
+					else
+						state=9;
+					pos++;
+				break;
+				case 11:
+					if(*curr=='>')
+						state=0;
+					else
+						state=9;
+					pos++;
 				break;
 				default:
 					fprintf(output, PARSERR"\tNo such state!\n", PARSARG);
