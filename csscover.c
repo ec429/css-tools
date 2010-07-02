@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
 	char ** h_assoc_ipath=NULL;
 	char ** c_assoc_ipath=NULL;
 	bool wdupfile=true;
+	bool wvermismatch=true;
 	bool hide_child_msgs=false;
 	int arg;
 	for(arg=1;arg<argc;arg++)
@@ -130,6 +131,7 @@ int main(int argc, char *argv[])
 			wdtd=true;
 			wquoteattr=true;
 			wclose=true;
+			wvermismatch=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
@@ -137,6 +139,7 @@ int main(int argc, char *argv[])
 			wdtd=false;
 			wquoteattr=false;
 			wclose=false;
+			wvermismatch=false;
 		}
 		else if(strcmp(argt, "-Wdupfile")==0)
 		{
@@ -169,6 +172,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-close")==0)
 		{
 			wclose=false;
+		}
+		else if(strcmp(argt, "-Wver-mismatch")==0)
+		{
+			wvermismatch=true;
+		}
+		else if(strcmp(argt, "-Wno-ver-mismatch")==0)
+		{
+			wvermismatch=false;
 		}
 		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -499,6 +510,12 @@ int main(int argc, char *argv[])
 					{
 						char * cver=unquote(msg+5);
 						fprintf(output, "csscover: cssi is version %s\n", cver);
+						if(strcmp(cver, VERSION)!=0)
+						{
+							fprintf(output, "csscover: Warning: version mismatch\n\tcsscover is %s\n", VERSION);
+							if(daemonmode)
+								printf("WARN:WVERMISMATCH:\"%s\":\"%s\"\n", VERSION, cver);
+						}
 						free(cver);
 						state=1;
 					}
