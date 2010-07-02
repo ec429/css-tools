@@ -391,21 +391,22 @@ int main(int argc, char *argv[])
 					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
 					return(2);
 				}
-				char *eargv[3+2*cfiles];
+				char *eargv[4+2*cfiles];
 				eargv[0]="cssi";
 				eargv[1]="-d";
+				eargv[2]="-Wall";
 				if(trace)
-					fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\"");
+					fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\", \"-Wall\"");
 				int i;
 				for(i=0;i<cfiles;i++)
 				{
-					eargv[2*i+2]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
-					sprintf(eargv[2*i+2], "-I=%s", c_assoc_ipath[i]);
-					eargv[2*i+3]=cssfiles[i];
+					eargv[2*i+3]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
+					sprintf(eargv[2*i+3], "-I=%s", c_assoc_ipath[i]);
+					eargv[2*i+4]=cssfiles[i];
 					if(trace)
-						fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+2], eargv[2*i+3]);
+						fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+3], eargv[2*i+4]);
 				}
-				eargv[2+2*cfiles]=NULL;
+				eargv[3+2*cfiles]=NULL;
 				if(trace)
 					fprintf(stderr, ", NULL})\n");
 				execvp("cssi", eargv);
