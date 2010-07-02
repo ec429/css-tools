@@ -145,7 +145,7 @@ The matcher basically functions, now, except that pessimism is forced (ie. the o
 
 ==CSSCOVER==
 
-	csscover [-d][-t] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]
+	csscover [-d][-t][-c] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]
 
 csscover is a command-line program which reads and parses one or more HTML files, then (with the help of cssi) determines which CSS rules in which files apply to them; it's basically to help you find unused (or hardly-used) CSS code.
 It's unfinished right now; it reads and parses HTML files but doesn't do anything with them.
@@ -154,7 +154,9 @@ Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to al
 Options:
 	-d,--daemon		Run in daemon mode
 	-h,--help		Invocation help
-	-t,--trace		Trace the parser state-machine (for debugging)
+	-t,--trace		Trace the parser state-machine and other things (for debugging)
+	-c,--hide_child_msgs
+					Prevent the child process (which should be daemon-mode cssi) from writing its long-form output to stderr
 	-w,--max-warn=<maxwarnings>
 					Output of warning messages stops after the <maxwarnings>th.  Default is 10
 	-Wall,-Wno-all	Enable/disable all warnings

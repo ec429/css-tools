@@ -72,9 +72,11 @@ ht_el;
 
 // function protos
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
+char * frgetl(int fd); // like fgetl but read()s from a file descriptor instead of fgetc()ing from a FILE *
 char * getl(void); // like fgetl(stdin) but strips trailing \n
 ht_el * htparse(char ** lines, int nlines, int * nels);
 int push(char **string, int *length, char c);
+char *unquote(char *src);
 
 // global vars
 FILE *output;
@@ -95,6 +97,7 @@ int main(int argc, char *argv[])
 	char ** h_assoc_ipath=NULL;
 	char ** c_assoc_ipath=NULL;
 	bool wdupfile=true;
+	bool hide_child_msgs=false;
 	int arg;
 	for(arg=1;arg<argc;arg++)
 	{
@@ -114,7 +117,12 @@ int main(int argc, char *argv[])
 		else if((strcmp(argt, "-t")==0)||(strcmp(argt, "--trace")==0))
 		{
 			trace=true;
-			fprintf(output, "cssi: Tracing on stderr\n");
+			fprintf(output, "csscover: Tracing on stderr\n");
+		}
+		else if((strcmp(argt, "-c")==0)||(strcmp(argt, "--hide-child-msgs")==0))
+		{
+			hide_child_msgs=true;
+			fprintf(output, "csscover: hiding child process messages\n");
 		}
 		else if(strcmp(argt, "-Wall")==0) // TODO:generically handle warnings, so I don't have to remember to add each new warning to -Wall and -Wno-all
 		{
@@ -358,7 +366,7 @@ int main(int argc, char *argv[])
 			{
 				ww=rp[1];close(rp[0]);
 				rr=wp[0];close(wp[1]);
-				if(!trace)
+				if(hide_child_msgs)
 					close(STDERR_FILENO); // we don't want to see cssi's long-form messages
 				if((e=dup2(ww, STDOUT_FILENO))==-1)
 				{
@@ -401,12 +409,14 @@ int main(int argc, char *argv[])
 		break;
 	}
 	fd_set master, readfds;
+	FD_ZERO(&master);
 	FD_SET(STDIN_FILENO, &master);
 	FD_SET(rr, &master);
 	int nfds=max(rr, STDIN_FILENO)+1;
 	int errupt=0;
-	fprintf(output, "csscover>");
-	fflush(output);
+	/*fprintf(output, "csscover>");
+	fflush(output);*/
+	int state=0;
 	while(!errupt)
 	{
 		readfds=master;
@@ -424,43 +434,104 @@ int main(int argc, char *argv[])
 			char * input=getl();
 			if(!input)
 			{
-				fprintf(output, "csscover: unexpected EOF on stdin\n");
+				fprintf(output, "csscover: Unexpected EOF on stdin\n");
 				if(daemonmode)
 					printf("ERR:EEOF:stdin\n");
 				return(3);
 			}
-			char * cmd=strtok(input, " ");
-			int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
-			char ** parmv=NULL;
-			char *p;
-			while((p=strtok(NULL, " ")))
+			if(state!=4)
 			{
-				parmc++;
-				parmv=(char **)realloc(parmv, parmc*sizeof(char *));
-				parmv[parmc-1]=p;
+				fprintf(output, "csscover: Error: Busy talking to the kids\n");
+				if(daemonmode)
+					printf("ERR:EBUSY\n");
+				if(input)
+					free(input);
 			}
-			if(cmd)
+			else
 			{
-				if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+				char * cmd=strtok(input, " ");
+				int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
+				char ** parmv=NULL;
+				char *p;
+				while((p=strtok(NULL, " ")))
 				{
-					errupt++;
+					parmc++;
+					parmv=(char **)realloc(parmv, parmc*sizeof(char *));
+					parmv[parmc-1]=p;
 				}
-				else
+				if(cmd)
 				{
-					if(daemonmode)
-						printf("ERR:EBADCMD:\"%s\"\n", cmd);
+					if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+					{
+						errupt++;
+					}
 					else
-						fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
+					{
+						if(daemonmode)
+							printf("ERR:EBADCMD:\"%s\"\n", cmd);
+						else
+							fprintf(output, "csscover: Error: unrecognised command %s!\n", cmd);
+					}
+				}
+				if(parmv)
+					free(parmv);
+				if(input)
+					free(input);
+				if(!errupt)
+				{
+					fprintf(output, "csscover>");
+					fflush(output);
 				}
 			}
-			if(parmv)
-				free(parmv);
-			if(input)
-				free(input);
 		}
 		if(FD_ISSET(rr, &readfds))
 		{
 			// message from below
+			char *msg = frgetl(rr);
+			if(trace)
+				fprintf(stderr, "cssi:%s", msg);
+			if(daemonmode)
+				printf("cssi:%s", msg);
+			switch(state)
+			{
+				case 0:
+					if(strncmp(msg, "CSSI:", 5)==0)
+					{
+						char * cver=unquote(msg+5);
+						fprintf(output, "csscover: cssi is version %s\n", cver);
+						free(cver);
+						state=1;
+					}
+				break;
+				case 1:
+					if(strncmp(msg, "PARSED*", 7)==0)
+					{
+						state=2;
+					}
+				break;
+				case 2:
+					if(strncmp(msg, "COLL:", 5)==0)
+					{
+						state=3;
+					}
+				break;
+				case 3:
+					if(strncmp(msg, "COLL*:", 6)==0)
+					{
+						state=4;
+						fprintf(output, "csscover>");
+						fflush(output);
+					}
+				break;
+				default:
+					fprintf(output, "csscover: Error: Bad state %d\n", state);
+					if(daemonmode)
+						printf("ERR:ESTATE:%d\n", state);
+					fprintf(stderr, "in handling message\n\tcssi:%s", msg);
+					return(4);
+				break;
+			}
+			free(msg);
 		}
 	}
 	kill(pid, SIGKILL);
@@ -478,6 +549,41 @@ char * fgetl(FILE *fp)
 	{
 		c=fgetc(fp);
 		if(c==EOF) // EOF without '\n' - we'd better put an '\n' in
+			c='\n';
+		if(c!=0)
+		{
+			lout[i++]=c;
+			if((i%80)==0)
+			{
+				if((lout=(char *)realloc(lout, i+81))==NULL)
+				{
+					printf("\nNot enough memory to store input!\n");
+					free(lout);
+					return(NULL);
+				}
+			}
+		}
+		if(c=='\n') // we do want to keep them this time
+			break;
+	}
+	lout[i]=0;
+	char *nlout=(char *)realloc(lout, i+1);
+	if(nlout==NULL)
+	{
+		return(lout); // it doesn't really matter (assuming realloc is a decent implementation and hasn't nuked the original pointer), we'll just have to temporarily waste a bit of memory
+	}
+	return(nlout);
+}
+
+char * frgetl(int fd)
+{
+	char * lout = (char *)malloc(81);
+	int i=0;
+	char c;
+	while(1)
+	{
+		int e=read(fd, &c, 1); // this is blocking, so if the child process didn't send its '\n' we will be blocked, which is bad
+		if(e<1) // EOF without '\n' - we'd better put an '\n' in
 			c='\n';
 		if(c!=0)
 		{
@@ -1070,4 +1176,20 @@ int push(char **string, int *length, char c)
 		return(0);
 	}
 	return(1);
+}
+
+char *unquote(char *src)
+{
+	char *q=strchr(src, '"');
+	if(!q)
+		return(NULL);
+	char *rv=strdup(q+1);
+	q=strchr(rv, '"');
+	if(!q)
+	{
+		free(rv);
+		return(NULL);
+	}
+	*q=0;
+	return(rv);
 }

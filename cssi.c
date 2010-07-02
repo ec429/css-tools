@@ -807,7 +807,10 @@ char * fgetl(FILE *fp)
 
 char * getl(char * prompt)
 {
-	printf("%s", prompt);
+	if(!daemonmode)
+	{
+		printf("%s", prompt);
+	}
 	fflush(stdout);
 	// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
 	char * lout = (char *)malloc(81);
