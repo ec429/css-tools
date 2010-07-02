@@ -678,6 +678,13 @@ int main(int argc, char *argv[])
 	while(!errupt)
 	{
 		char * input=getl("cssi>");
+		if(!input)
+		{
+			fprintf(output, "cssi: unexpected EOF on stdin\n");
+			if(daemonmode)
+				printf("ERR:EEOF:stdin\n");
+			return(3);
+		}
 		char * cmd=strtok(input, " ");
 		int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
 		char ** parmv=NULL;
@@ -805,12 +812,17 @@ char * getl(char * prompt)
 	// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
 	char * lout = (char *)malloc(81);
 	int i=0;
-	char c;
+	signed int c;
 	while(1)
 	{
 		c = getchar();
 		if (c == 10)
 			break;
+		if (c == EOF)
+		{
+			free(lout);
+			return(NULL);
+		}
 		if (c != 0)
 		{
 			lout[i++]=c;
