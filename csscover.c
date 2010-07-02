@@ -26,6 +26,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <ctype.h>
 
 #include "tags.h"
 
@@ -48,6 +49,13 @@ typedef struct
 	int par; // offset of parent into ht_el array
 }
 ht_el;
+
+typedef struct
+{
+	int total; // total usage count across all files
+	int *use; // array, size=nfiles
+}
+sel;
 
 // Interface strings and arguments for [f]printf()
 #define USAGE_STRING	"Usage: csscover [-d] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]"
@@ -391,22 +399,25 @@ int main(int argc, char *argv[])
 					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
 					return(2);
 				}
-				char *eargv[4+2*cfiles];
+				char *eargv[trace?4:5+2*cfiles];
 				eargv[0]="cssi";
 				eargv[1]="-d";
 				eargv[2]="-Wall";
 				if(trace)
-					fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\", \"-Wall\"");
+				{
+					eargv[3]="-t";
+					fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\", \"-Wall\", \"-t\"");
+				}
 				int i;
 				for(i=0;i<cfiles;i++)
 				{
-					eargv[2*i+3]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
-					sprintf(eargv[2*i+3], "-I=%s", c_assoc_ipath[i]);
-					eargv[2*i+4]=cssfiles[i];
+					eargv[2*i+(trace?4:3)]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
+					sprintf(eargv[2*i+(trace?4:3)], "-I=%s", c_assoc_ipath[i]);
+					eargv[2*i+(trace?5:4)]=cssfiles[i];
 					if(trace)
-						fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+3], eargv[2*i+4]);
+						fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+(trace?4:3)], eargv[2*i+(trace?5:4)]);
 				}
-				eargv[3+2*cfiles]=NULL;
+				eargv[(trace?4:3)+2*cfiles]=NULL;
 				if(trace)
 					fprintf(stderr, ", NULL})\n");
 				execvp("cssi", eargv);
@@ -424,10 +435,20 @@ int main(int argc, char *argv[])
 	FD_ZERO(&master);
 	FD_SET(STDIN_FILENO, &master);
 	FD_SET(rr, &master);
+	FILE *fchild = fdopen(ww, "w"); // get a stream to send stuff to the child
+	if(!fchild)
+	{
+		fprintf(output, "csscover: Error: Failed put stream on write-pipe: %s\n", strerror(errno));
+		if(daemonmode)
+			printf("ERR:EFDOPEN\n");
+		return(2);
+	}
 	int nfds=max(rr, STDIN_FILENO)+1;
 	int errupt=0;
 	/*fprintf(output, "csscover>");
 	fflush(output);*/
+	sel * sels=NULL;
+	int nsels=0;
 	int state=0;
 	while(!errupt)
 	{
@@ -453,6 +474,13 @@ int main(int argc, char *argv[])
 			}
 			if(state!=4)
 			{
+				if(input[0]=='q')
+				{
+					fprintf(output, "csscover: Error: Interrupted\n");
+					if(daemonmode)
+						printf("ERR:EINTR\n");
+					return(3);
+				}
 				fprintf(output, "csscover: Error: Busy talking to the kids\n");
 				if(daemonmode)
 					printf("ERR:EBUSY\n");
@@ -500,10 +528,19 @@ int main(int argc, char *argv[])
 		{
 			// message from below
 			char *msg = frgetl(rr);
+			if(!msg || !msg[0] || msg[0]=='\n') // no message or empty message
+			{
+				fprintf(stderr, "csscover: Error: cssi died\n");
+				if(daemonmode)
+					printf("ERR:ECHILDDIED\n");
+				return(4);
+			}
+			char *from="cssi:";
+			if(islower(msg[0])) from="";
 			if(trace)
-				fprintf(stderr, "cssi:%s", msg);
+				fprintf(stderr, "csscover:%s%s", from, msg);
 			if(daemonmode)
-				printf("cssi:%s", msg);
+				printf("%s%s", from, msg);
 			switch(state)
 			{
 				case 0:
@@ -536,9 +573,17 @@ int main(int argc, char *argv[])
 				case 3:
 					if(strncmp(msg, "COLL*:", 6)==0)
 					{
-						state=4;
-						fprintf(output, "csscover>");
-						fflush(output);
+						state=5;
+						/*fprintf(output, "csscover>"); // TODO build usage table first before handing over to the user
+						fflush(output);*/
+						fprintf(fchild, "sel\n");
+						fflush(fchild);
+					}
+				break;
+				case 5:
+					if(strcmp(msg, "SEL...\n")==0)
+					{
+						state=6;
 					}
 				break;
 				default:
