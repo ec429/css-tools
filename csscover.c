@@ -52,8 +52,16 @@ ht_el;
 
 typedef struct
 {
+	int file;
+	int line;
+	int col;
+}
+use;
+
+typedef struct
+{
 	int total; // total usage count across all files
-	int *use; // array, size=nfiles
+	use *usages; // array, size=total
 }
 sel;
 
@@ -452,6 +460,12 @@ int main(int argc, char *argv[])
 	int state=0;
 	while(!errupt)
 	{
+		if(state==255) // return control to the user, and say so
+		{
+			fprintf(output, "csscover>");
+			fflush(output);
+			state=4;
+		}
 		readfds=master;
 		int e=select(nfds, &readfds, NULL, NULL, NULL); // blocks until something happens
 		if(e==-1)
@@ -504,6 +518,7 @@ int main(int argc, char *argv[])
 					if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
 					{
 						errupt++;
+						state=256;
 					}
 					else
 					{
@@ -517,7 +532,7 @@ int main(int argc, char *argv[])
 					free(parmv);
 				if(input)
 					free(input);
-				if(!errupt)
+				if(state==4)
 				{
 					fprintf(output, "csscover>");
 					fflush(output);
@@ -574,8 +589,9 @@ int main(int argc, char *argv[])
 					if(strncmp(msg, "COLL*:", 6)==0)
 					{
 						state=5;
-						/*fprintf(output, "csscover>"); // TODO build usage table first before handing over to the user
-						fflush(output);*/
+						fprintf(output, "csscover: Building usage table\n");
+						if(daemonmode)
+							printf("UTBL:\n");
 						fprintf(fchild, "sel\n");
 						fflush(fchild);
 					}
@@ -584,6 +600,28 @@ int main(int argc, char *argv[])
 					if(strcmp(msg, "SEL...\n")==0)
 					{
 						state=6;
+					}
+				break;
+				case 6:
+					if(strncmp(msg, "RECORD:", 7)==0)
+					{
+						int id=-1;
+						sscanf(msg, "RECORD:ID=%d:", &id);
+						if(id!=nsels)
+						{
+							fprintf(output, "csscover: Error: Disordered selectors or bad ID number\n");
+							if(daemonmode)
+								printf("ERR:EBADID\n");
+							return(4);
+						}
+						nsels++;
+						sels=(sel *)realloc(sels, nsels*sizeof(sel));
+						sels[nsels-1].total=0;
+						sels[nsels-1].usages=NULL;
+					}
+					else if(msg[0]=='.')
+					{
+						state=255;
 					}
 				break;
 				default:
