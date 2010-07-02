@@ -6,6 +6,8 @@
 	tags.h - list of recognised HTML tags
 */
 
+#define TAG_LINK 52
+
 // TODO: make this into a radix tree for faster searching, use a struct with things like a Deprecated flag (and no-close, etc) that we can warn about
 //  -- although css-tools *IS NOT A VALIDATOR*
 char *tags[]=

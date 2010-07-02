@@ -435,8 +435,20 @@ int main(int argc, char *argv[])
 								pos=(endurl-mfile[line])+1;
 								nfiles++;
 								filename=(char **)realloc(filename, nfiles*sizeof(char *));
-								filename[nfiles-1]=(char *)malloc(strlen(assoc_ipath[i])+strlen(url)+1);
-								sprintf(filename[nfiles-1], "%s%s", assoc_ipath[i], url);
+								if(url[0]=='/') // semi-absolute path, so we use the ipath
+								{
+									filename[nfiles-1]=(char *)malloc(strlen(assoc_ipath[i])+strlen(url)+1);
+									sprintf(filename[nfiles-1], "%s%s", assoc_ipath[i], url+1);
+								}
+								else // relative path
+								{
+									char * cpath = strdup(filename[i]);
+									while(!((cpath[strlen(cpath)-1]=='/')||(cpath[strlen(cpath)-1]==0)))
+										cpath[strlen(cpath)-1]=0;
+									filename[nfiles-1]=(char *)malloc(strlen(cpath)+strlen(url)+1);
+									sprintf(filename[nfiles-1], "%s%s", cpath, url);
+									free(cpath);
+								}
 								assoc_ipath=(char **)realloc(assoc_ipath, nfiles*sizeof(char *));
 								assoc_ipath[nfiles-1]=assoc_ipath[i];
 							}

@@ -271,7 +271,54 @@ int main(int argc, char *argv[])
 			free(mfile[file][nlines[file]]);
 		}
 		html[file] = htparse(mfile[file], nlines[file], &nels[file]);
-		// TODO: search it for CSS links
+		int i;
+		for(i=0;i<nels[file];i++)
+		{
+			if(trace)
+				fprintf(stderr, "%d:%s\n", html[file][i].tag, tags[html[file][i].tag]);
+			if(html[file][i].tag==TAG_LINK)
+			{
+				bool isss=false;
+				int j;
+				for(j=0;j<html[file][i].nattrs&&!isss;j++)
+				{
+					if(strcmp(html[file][i].attrs[j].name, "rel")==0)
+					{
+						if(strcmp(html[file][i].attrs[j].value, "stylesheet")==0)
+						{
+							isss=true;
+						}
+					}
+				}
+				if(isss)
+				{
+					for(j=0;j<html[file][i].nattrs;j++)
+					{
+						if(strcmp(html[file][i].attrs[j].name, "href")==0)
+						{
+							cfiles++;
+							cssfiles=(char **)realloc(cssfiles, cfiles*sizeof(char *));
+							if(html[file][i].attrs[j].value[0]=='/') // semi-absolute, so we use the ipath
+							{
+								cssfiles[cfiles-1]=(char *)malloc(strlen(h_assoc_ipath[file])+strlen(html[file][i].attrs[j].value)+1);
+								sprintf(cssfiles[cfiles-1], "%s%s", h_assoc_ipath[file], html[file][i].attrs[j].value+1);
+							}
+							else // relative, so we use the path to the htmlfile
+							{
+								char * cpath = strdup(filename[file]);
+								while(!((cpath[strlen(cpath)-1]=='/')||(cpath[strlen(cpath)-1]==0)))
+									cpath[strlen(cpath)-1]=0;
+								cssfiles[cfiles-1]=(char *)malloc(strlen(cpath)+strlen(html[file][i].attrs[j].value)+1);
+								sprintf(cssfiles[cfiles-1], "%s%s", cpath, html[file][i].attrs[j].value);
+								free(cpath);
+							}
+							c_assoc_ipath=(char **)realloc(c_assoc_ipath, cfiles*sizeof(char *));
+							c_assoc_ipath[cfiles-1]=h_assoc_ipath[file];
+						}
+					}
+				}
+			}
+		}
 		skip:
 		;
 	}
@@ -310,21 +357,35 @@ int main(int argc, char *argv[])
 		default: // child
 			ww=rp[1];close(rp[0]);
 			rr=wp[0];close(wp[1]);
-			if((e=dup2(ww, STDOUT_FILENO)))
+			if((e=dup2(ww, STDOUT_FILENO))==-1)
 			{
-				fprintf(output, "csscover.child: Error: Failed to redirect stdout with dup2: %s\n", strerror(errno));
-				if(daemonmode)
-					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+				fprintf(stderr, "csscover.child: Error: Failed to redirect stdout with dup2: %s\n", strerror(errno));
+				write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
 				return(2);
 			}
-			if((e=dup2(rr, STDIN_FILENO)))
+			if((e=dup2(rr, STDIN_FILENO))==-1)
 			{
-				fprintf(output, "csscover.child: Error: Failed to redirect stdin with dup2: %s\n", strerror(errno));
-				if(daemonmode)
-					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+				fprintf(stderr, "csscover.child: Error: Failed to redirect stdin with dup2: %s\n", strerror(errno));
+				write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
 				return(2);
 			}
-			// TODO exec
+			char *eargv[3+2*cfiles];
+			eargv[0]="cssi";
+			eargv[1]="-d";
+			if(trace) fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\"");
+			int i;
+			for(i=0;i<cfiles;i++)
+			{
+				eargv[2*i+2]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
+				sprintf(eargv[2*i+2], "-I=%s", c_assoc_ipath[i]);
+				eargv[2*i+3]=cssfiles[i];
+				if(trace) fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+2], eargv[2*i+3]);
+			}
+			eargv[2+2*cfiles]=NULL;
+			if(trace) fprintf(stderr, ", NULL})\n");
+			execvp("cssi", eargv);
+			fprintf(stderr, "csscover.child: Error: Failed to execvp cssi: %s\n", strerror(errno));
+			write(rp[1], "ERR:EEXEC\n", strlen("ERR:EEXEC\n"));
 			return(255);
 		break;
 	}
@@ -542,7 +603,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 											parent=rv[parent].par;
 										}
 										else
-										{
+										{ // this might not really be an error, since in HTML you're allowed to do this; in XHTML it's an error
 											fprintf(output, PARSERR"\tIncorrect nesting or closed tag not open\n", PARSARG);
 											fprintf(output, PMKLINE);
 											if(daemonmode)
