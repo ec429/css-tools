@@ -170,6 +170,7 @@ Warnings:
 	-Wdtd			Various warnings concerning Document Type Declarations (<!DOCTYPE>).  Default TRUE
 	-Wquoteattr		Attribute values given without enclosing quotes.  Default TRUE
 	-Wclose			Element(s) left open at end-of-file.  Default TRUE
+	-wver-mismatch	Child process is from a different version of css-tools.  Default TRUE
 Commands for the csscover shell:
 	quit
 		Quits csscover

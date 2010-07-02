@@ -510,7 +510,7 @@ int main(int argc, char *argv[])
 					{
 						char * cver=unquote(msg+5);
 						fprintf(output, "csscover: cssi is version %s\n", cver);
-						if(strcmp(cver, VERSION)!=0)
+						if((strcmp(cver, VERSION)!=0) && wvermismatch && (nwarnings++<maxwarnings))
 						{
 							fprintf(output, "csscover: Warning: version mismatch\n\tcsscover is %s\n", VERSION);
 							if(daemonmode)
