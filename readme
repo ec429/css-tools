@@ -148,7 +148,7 @@ The matcher basically functions, now, except that pessimism is forced (ie. the o
 	csscover [-d][-t][-c] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]
 
 csscover is a command-line program which reads and parses one or more HTML files, then (with the help of cssi) determines which CSS rules in which files apply to them; it's basically to help you find unused (or hardly-used) CSS code.
-It's unfinished right now; it reads and parses HTML files but doesn't do anything with them.
+It's unfinished right now; it reads and parses HTML files, finds stylesheet links, and runs cssi as a child to parse the stylesheets.
 Remember that *csscover is not a validator*; it accepts some invalid constructs, and probably rejects some valid ones (although the latter would be a bug).
 Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use csscover.  Some long-form output will still be produced, but redirected to stderr.
 Options:
@@ -170,6 +170,12 @@ Warnings:
 	-Wdtd			Various warnings concerning Document Type Declarations (<!DOCTYPE>).  Default TRUE
 	-Wquoteattr		Attribute values given without enclosing quotes.  Default TRUE
 	-Wclose			Element(s) left open at end-of-file.  Default TRUE
+Commands for the csscover shell:
+	quit
+		Quits csscover
+You only need to use enough characters of the command name to match it unambiguously.  The same does *not* apply to arguments, which must be given in full.
+Arguments are space-delimited.
+If you try to enter a command while the previous command is being (asychronously) processed, the sequencer will reject the input with an EBUSY.  The long-form error message for this is "Busy talking to the kids", ie. the child process.
 Known Issues:
 	For the parser to accept the HTML file, elements must be correctly nested and must be explicitly closed before closing their parent element.  While this is the requirement under XHTML, there are some cases where HTML permits it (such as <br>, which in XHTML becomes the self-closing <br />; or <div><p></div> where the P is implicitly closed).  For this reason, if using css-tools you are advised to use XHTML for your site.  In the future css-tools will (hopefully) support HTML's automatic closure.
 	Attribute values cannot be enclosed in 'single quotes', only "double quotes".  This will hopefully be fixed at some point in the future.
