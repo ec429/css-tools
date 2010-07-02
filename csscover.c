@@ -24,6 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "tags.h"
 
@@ -70,7 +71,7 @@ ht_el;
 
 // function protos
 char * fgetl(FILE *); // gets a line of string data; returns a malloc-like pointer (preserves trailing \n)
-char * getl(char *); // like fgetl(stdin) but prints a prompt too (strips trailing \n)
+char * getl(void); // like fgetl(stdin) but strips trailing \n
 ht_el * htparse(char ** lines, int nlines, int * nels);
 int push(char **string, int *length, char c);
 
@@ -348,46 +349,111 @@ int main(int argc, char *argv[])
 		case -1: // failure
 			fprintf(output, "csscover: Error: failed to fork cssi: %s\n", strerror(errno));
 			if(daemonmode)
+			{
 				printf("ERR:EFORK\n");
+			}
 		break;
-		case 0: // parent
+		case 0: // child
+			{
+				ww=rp[1];close(rp[0]);
+				rr=wp[0];close(wp[1]);
+				if(!trace)
+					close(STDERR_FILENO); // we don't want to see cssi's long-form messages
+				if((e=dup2(ww, STDOUT_FILENO))==-1)
+				{
+					fprintf(stderr, "csscover.child: Error: Failed to redirect stdout with dup2: %s\n", strerror(errno));
+					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+					return(2);
+				}
+				if((e=dup2(rr, STDIN_FILENO))==-1)
+				{
+					fprintf(stderr, "csscover.child: Error: Failed to redirect stdin with dup2: %s\n", strerror(errno));
+					write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
+					return(2);
+				}
+				char *eargv[3+2*cfiles];
+				eargv[0]="cssi";
+				eargv[1]="-d";
+				if(trace)
+					fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\"");
+				int i;
+				for(i=0;i<cfiles;i++)
+				{
+					eargv[2*i+2]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
+					sprintf(eargv[2*i+2], "-I=%s", c_assoc_ipath[i]);
+					eargv[2*i+3]=cssfiles[i];
+					if(trace)
+						fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+2], eargv[2*i+3]);
+				}
+				eargv[2+2*cfiles]=NULL;
+				if(trace)
+					fprintf(stderr, ", NULL})\n");
+				execvp("cssi", eargv);
+				fprintf(stderr, "csscover.child: Error: Failed to execvp cssi: %s\n", strerror(errno));
+				write(rp[1], "ERR:EEXEC\n", strlen("ERR:EEXEC\n"));
+				return(255);
+			}
+		break;
+		default: // parent
 			ww=wp[1];close(wp[0]);
 			rr=rp[0];close(rp[1]);
 		break;
-		default: // child
-			ww=rp[1];close(rp[0]);
-			rr=wp[0];close(wp[1]);
-			if((e=dup2(ww, STDOUT_FILENO))==-1)
+	}
+	fd_set master, readfds;
+	FD_SET(STDIN_FILENO, &master);
+	FD_SET(rr, &master);
+	int nfds=max(rr, STDIN_FILENO)+1;
+	int errupt=0;
+	fprintf(output, "csscover>");
+	fflush(output);
+	while(!errupt)
+	{
+		readfds=master;
+		int e=select(nfds, &readfds, NULL, NULL, NULL); // blocks until something happens
+		if(e==-1)
+		{
+			fprintf(output, "csscover: Error: select() failed: %s\n", strerror(errno));
+			if(daemonmode)
+				printf("ERR:ESELECT\n");
+			return(2);
+		}
+		if(FD_ISSET(STDIN_FILENO, &readfds))
+		{
+			// orders from above
+			char * input=getl();
+			char * cmd=strtok(input, " ");
+			int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
+			char ** parmv=NULL;
+			char *p;
+			while((p=strtok(NULL, " ")))
 			{
-				fprintf(stderr, "csscover.child: Error: Failed to redirect stdout with dup2: %s\n", strerror(errno));
-				write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
-				return(2);
+				parmc++;
+				parmv=(char **)realloc(parmv, parmc*sizeof(char *));
+				parmv[parmc-1]=p;
 			}
-			if((e=dup2(rr, STDIN_FILENO))==-1)
+			if(cmd)
 			{
-				fprintf(stderr, "csscover.child: Error: Failed to redirect stdin with dup2: %s\n", strerror(errno));
-				write(rp[1], "ERR:EDUP2\n", strlen("ERR:EDUP2\n"));
-				return(2);
+				if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+				{
+					errupt++;
+				}
+				else
+				{
+					if(daemonmode)
+						printf("ERR:EBADCMD:\"%s\"\n", cmd);
+					else
+						fprintf(output, "cssi: Error: unrecognised command %s!\n", cmd);
+				}
 			}
-			char *eargv[3+2*cfiles];
-			eargv[0]="cssi";
-			eargv[1]="-d";
-			if(trace) fprintf(stderr, "execvp(\"cssi\", {\"cssi\", \"-d\"");
-			int i;
-			for(i=0;i<cfiles;i++)
-			{
-				eargv[2*i+2]=(char *)malloc(4+strlen(c_assoc_ipath[i]));
-				sprintf(eargv[2*i+2], "-I=%s", c_assoc_ipath[i]);
-				eargv[2*i+3]=cssfiles[i];
-				if(trace) fprintf(stderr, ", \"%s\", \"%s\"", eargv[2*i+2], eargv[2*i+3]);
-			}
-			eargv[2+2*cfiles]=NULL;
-			if(trace) fprintf(stderr, ", NULL})\n");
-			execvp("cssi", eargv);
-			fprintf(stderr, "csscover.child: Error: Failed to execvp cssi: %s\n", strerror(errno));
-			write(rp[1], "ERR:EEXEC\n", strlen("ERR:EEXEC\n"));
-			return(255);
-		break;
+			if(parmv)
+				free(parmv);
+			if(input)
+				free(input);
+		}
+		if(FD_ISSET(rr, &readfds))
+		{
+			// message from below
+		}
 	}
 	return(0);
 }
@@ -429,10 +495,8 @@ char * fgetl(FILE *fp)
 	return(nlout);
 }
 
-char * getl(char * prompt)
+char * getl(void)
 {
-	printf("%s", prompt);
-	fflush(stdout);
 	// gets a line of string data, {re}alloc()ing as it goes, so you don't need to make a buffer for it, nor must thee fret thyself about overruns!
 	char * lout = (char *)malloc(81);
 	int i=0;
