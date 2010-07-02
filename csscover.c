@@ -52,7 +52,7 @@ ht_el;
 
 typedef struct
 {
-	int file;
+	int file; // file, line and col in the HTML, *not* the CSS
 	int line;
 	int col;
 }
@@ -62,6 +62,7 @@ typedef struct
 {
 	int total; // total usage count across all files
 	use *usages; // array, size=total
+	char *record; // everything cssi told us when we listed all selectors
 }
 sel;
 
@@ -93,6 +94,7 @@ char * getl(void); // like fgetl(stdin) but strips trailing \n
 ht_el * htparse(char ** lines, int nlines, int * nels);
 int push(char **string, int *length, char c);
 char *unquote(char *src);
+char *buildmatch(ht_el * file, int el);
 
 // global vars
 FILE *output;
@@ -457,6 +459,7 @@ int main(int argc, char *argv[])
 	fflush(output);*/
 	sel * sels=NULL;
 	int nsels=0;
+	int el;
 	int state=0;
 	while(!errupt)
 	{
@@ -493,6 +496,8 @@ int main(int argc, char *argv[])
 					fprintf(output, "csscover: Error: Interrupted\n");
 					if(daemonmode)
 						printf("ERR:EINTR\n");
+					fprintf(fchild, "quit\n");
+					fflush(fchild);
 					return(3);
 				}
 				fprintf(output, "csscover: Error: Busy talking to the kids\n");
@@ -551,10 +556,20 @@ int main(int argc, char *argv[])
 				return(4);
 			}
 			char *from="cssi:";
-			if(islower(msg[0])) from="";
-			if(trace)
+			char *first=msg;
+			if(islower(msg[0]))
+			{
+				from="";
+				first=strchr(msg, ':');
+				if(!first)
+					first=msg;
+				else
+					first++;
+			}
+			bool iserr=(strncmp(first, "ERR:", 4)==0);
+			if(trace || iserr)
 				fprintf(stderr, "csscover:%s%s", from, msg);
-			if(daemonmode)
+			if(daemonmode || iserr)
 				printf("%s%s", from, msg);
 			switch(state)
 			{
@@ -618,10 +633,50 @@ int main(int argc, char *argv[])
 						sels=(sel *)realloc(sels, nsels*sizeof(sel));
 						sels[nsels-1].total=0;
 						sels[nsels-1].usages=NULL;
+						sels[nsels-1].record=strdup(msg);
 					}
 					else if(msg[0]=='.')
 					{
-						state=255;
+						state=7;
+						file=0;
+						el=0;
+					}
+				break;
+				case 8:
+					if(strncmp(msg, "RECORD:", 7)==0)
+					{
+						int id=-1;
+						sscanf(msg, "RECORD:ID=%d:", &id);
+						if(id<0)
+						{
+							fprintf(output, "csscover: Error: Bad ID number\n");
+							if(daemonmode)
+								printf("ERR:EBADID\n");
+							return(4);
+						}
+						sels[id].total++;
+						sels[id].usages=(use *)realloc(sels[id].usages, sels[id].total*sizeof(use));
+						use *curr=&sels[id].usages[sels[id].total-1];
+						curr->file=file;
+						curr->line=html[file][el].line;
+						curr->col=html[file][el].col;
+					}
+					else if(msg[0]=='.')
+					{
+						state=7;
+						el++;
+						if(el>=nels[file])
+						{
+							file++;
+							el=0;
+						}
+						if(file>=nfiles)
+						{
+							fprintf(output, "csscover: Finished building usage table\n");
+							if(daemonmode)
+								printf("UTBL*\n");
+							state=255;
+						}
 					}
 				break;
 				default:
@@ -631,6 +686,14 @@ int main(int argc, char *argv[])
 					fprintf(stderr, "in handling message\n\tcssi:%s", msg);
 					return(4);
 				break;
+			}
+			if(state==7)
+			{
+				char *match=buildmatch(html[file], el);
+				fprintf(fchild, "sel match=0%s\n", match);
+				fflush(fchild);
+				free(match);
+				state=8;
 			}
 			free(msg);
 		}
@@ -1292,5 +1355,54 @@ char *unquote(char *src)
 		return(NULL);
 	}
 	*q=0;
+	return(rv);
+}
+
+char *buildmatch(ht_el * file, int el)
+{
+	char *rv;
+	ht_el curr=file[el];
+	char *desc=strdup(tags[curr.tag]); // TODO [attr] when cssi supports it
+	int i;
+	for(i=0;i<curr.nattrs;i++)
+	{
+		ht_attr a=curr.attrs[i];
+		if(strcmp(a.name, "id")==0)
+		{
+			desc=(char *)realloc(desc, strlen(desc)+strlen(a.value)+2);
+			strcat(desc, "#");
+			strcat(desc, a.value);
+		}
+		else if(strcmp(a.name, "class")==0)
+		{
+			char *class=strdup(a.value);
+			desc=(char *)realloc(desc, strlen(desc)+strlen(class)+2);
+			char *spc;
+			while((spc=strchr(class, ' '))) *spc='.'; // TODO don't let "  " become ".." as this is specified to set pessimism; right now that doesn't matter but it could in future if we get optimism controls in cssi; technically it still wouldn't matter as csscover wants pessimism - but it's the Wrong Thing to just leave it in there
+			strcat(desc, ".");
+			strcat(desc, class);
+			free(class);
+		}
+	}
+	if(curr.sib>=0)
+	{
+		char *sib=buildmatch(file, curr.sib);
+		rv=(char *)malloc(strlen(sib)+2+strlen(desc));
+		sprintf(rv, "%s+%s", sib, desc);
+		free(sib);
+		free(desc);
+	}
+	else if(curr.par>=0)
+	{
+		char *par=buildmatch(file, curr.par);
+		rv=(char *)malloc(strlen(par)+2+strlen(desc)+12);
+		sprintf(rv, "%s>%s:first-child", par, desc);
+		free(par);
+		free(desc);
+	}
+	else
+	{
+		rv=desc;
+	}
 	return(rv);
 }
