@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <errno.h>
 #include <sys/time.h>
 
@@ -455,6 +456,7 @@ int main(int argc, char *argv[])
 			// message from below
 		}
 	}
+	kill(pid, SIGKILL);
 	return(0);
 }
 
