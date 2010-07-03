@@ -141,14 +141,13 @@ The matcher is case-sensitive.
 The default optimism and prepension settings should be alterable with some kind of option command (and cmdline options).
 
 Implementation status:
-The matcher basically functions, now, except that pessimism is forced (ie. the optimism settings are not supported and the default is matchp).
+The matcher basically functions, now, except that pessimism is forced (ie. the optimism settings are not supported and the default is matchp).  Actually, there seems to be a bug in which trees with siblings match everything.
 
 ==CSSCOVER==
 
 	csscover [-d][-t][-c] [-I=<importpath>] [-W[no-]<warning> [...]] <htmlfile> [...]
 
 csscover is a command-line program which reads and parses one or more HTML files, then (with the help of cssi) determines which CSS rules in which files apply to them; it's basically to help you find unused (or hardly-used) CSS code.
-It's unfinished right now; it reads and parses HTML files, finds stylesheet links, and runs cssi as a child to parse the stylesheets.
 Remember that *csscover is not a validator*; it accepts some invalid constructs, and probably rejects some valid ones (although the latter would be a bug).
 Daemon mode: Output is sent, in a terse form, to stdout.  This is designed to allow front-end tools and interfaces to use csscover.  Some long-form output will still be produced, but redirected to stderr.
 Options:
@@ -172,6 +171,20 @@ Warnings:
 	-Wclose			Element(s) left open at end-of-file.  Default TRUE
 	-wver-mismatch	Child process is from a different version of css-tools.  Default TRUE
 Commands for the csscover shell:
+	selector [<cssi-param> [...]] [usage[<comp><value>]]
+		Lists selectors matching the specified params
+		<cssi-param>s are tests which would be valid arguments to the 'selector' command in cssi
+		<comp> may be any of:
+			=	equals
+			<	less than
+			>	greater than
+			<=	less than or equal to
+			>=	greater than or equal to
+			!=	does not equal
+		<value> is evaluated as a decimal number
+		If no <comp><value> pair is given to a usage argument, it shall be equivalent to 'usage!=0'
+	dump <filename>
+		Writes out the usage table to <filename> in a format to be defined at a later date
 	quit
 		Quits csscover
 You only need to use enough characters of the command name to match it unambiguously.  The same does *not* apply to arguments, which must be given in full.

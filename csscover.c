@@ -509,7 +509,7 @@ int main(int argc, char *argv[])
 			else
 			{
 				char * cmd=strtok(input, " ");
-				int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
+				int parmc=0; // the names are, of course, modelled on argc and argv
 				char ** parmv=NULL;
 				char *p;
 				while((p=strtok(NULL, " ")))
@@ -520,7 +520,40 @@ int main(int argc, char *argv[])
 				}
 				if(cmd)
 				{
-					if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
+					if(strncmp(cmd, "dump", strlen(cmd))==0) // dump the usage table to file
+					{
+						if(parmc!=1)
+						{
+							fprintf(output, "csscover: Error: Wrong number of params.  Usage: dump <filename>\n");
+							if(daemonmode)
+								printf("ERR:EBADPARM\n");
+						}
+						else
+						{
+							FILE *dfp=fopen(parmv[0], "w");
+							if(!dfp)
+							{
+								fprintf(output, "csscover: Error: Failed to open dump file: %s\n", strerror(errno));
+								if(daemonmode)
+									printf("ERR:ECANTWRITE\n");
+							}
+							else
+							{
+								int i;
+								for(i=0;i<nsels;i++)
+								{
+									fprintf(dfp, "%.*s:TOTAL=%d:...\n", strlen(sels[i].record)-1, sels[i].record, sels[i].total);
+									int j;
+									for(j=0;j<sels[i].total;j++)
+									{
+										fprintf(dfp, "USAGE:ID=%d:FILE=\"%s\":LINE=%d:COL=%d\n", j, filename[sels[i].usages[j].file], sels[i].usages[j].line, sels[i].usages[j].col);
+									}
+									fprintf(dfp, ".\n");
+								}
+							}
+						}
+					}
+					else if(strncmp(cmd, "quit", strlen(cmd))==0) // quit
 					{
 						errupt++;
 						state=256;
@@ -568,8 +601,8 @@ int main(int argc, char *argv[])
 			}
 			bool iserr=(strncmp(first, "ERR:", 4)==0);
 			if(trace || iserr)
-				fprintf(stderr, "csscover:%s%s", from, msg);
-			if(daemonmode || iserr)
+				fprintf(stderr, "%s%s", from, msg);
+			if(daemonmode)
 				printf("%s%s", from, msg);
 			switch(state)
 			{

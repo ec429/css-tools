@@ -686,7 +686,7 @@ int main(int argc, char *argv[])
 			return(3);
 		}
 		char * cmd=strtok(input, " ");
-		int parmc=0; // the names are, of course, modelled on argc and argv.  TODO: pipelines (will require considerable encapsulation)
+		int parmc=0; // the names are, of course, modelled on argc and argv
 		char ** parmv=NULL;
 		char *p;
 		bool err=false;
