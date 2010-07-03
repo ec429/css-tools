@@ -169,10 +169,11 @@ Warnings:
 	-Wdtd			Various warnings concerning Document Type Declarations (<!DOCTYPE>).  Default TRUE
 	-Wquoteattr		Attribute values given without enclosing quotes.  Default TRUE
 	-Wclose			Element(s) left open at end-of-file.  Default TRUE
-	-wver-mismatch	Child process is from a different version of css-tools.  Default TRUE
+	-Wver-mismatch	Child process is from a different version of css-tools.  Default TRUE
+	-Wcase			Upper-case has been used for an element or attribute name in HTML.  Default TRUE
 Commands for the csscover shell:
 	selector [<cssi-param> [...]] [usage[<comp><value>]]
-		Lists selectors matching the specified params
+		Lists selectors matching the specified params.  Not implemented yet
 		<cssi-param>s are tests which would be valid arguments to the 'selector' command in cssi
 		<comp> may be any of:
 			=	equals
@@ -194,4 +195,4 @@ Known Issues:
 	For the parser to accept the HTML file, elements must be correctly nested and must be explicitly closed before closing their parent element.  While this is the requirement under XHTML, there are some cases where HTML permits it (such as <br>, which in XHTML becomes the self-closing <br />; or <div><p></div> where the P is implicitly closed).  For this reason, if using css-tools you are advised to use XHTML for your site.  In the future css-tools will (hopefully) support HTML's automatic closure.
 	Attribute values cannot be enclosed in 'single quotes', only "double quotes".  This will hopefully be fixed at some point in the future.
 	[X]HTML comments are handled in an incorrect manner: <!-- is treated as an 'open comment delimiter' and --> as a 'close comment delimiter'.  This is contrary to the HTML specification in which <! and > delimit an SGML declaration and -- delimits a comment within a declaration, or equivalently to the XHTML specification in which, although <!-- and --> do delimit a comment, -- must not appear in the body of a comment.  The correct behaviour for a validator would be to reject invalid comment forms; however, many authors write - and, as a result, several User-Agents accept - such invalid comments.  Also, the validity of a comment may depend on the DTD, as, for instance, HTML allows whitespace between the -- and the > closing a comment, whereas XML does not - and csscover doesn't parse the <!DOCTYPE> declaration (and in any case, one might not be present).  Hence, the correct behaviour for csscover is to accept anything that could be a valid comment, but generate a warning on anything that could be an invalid comment (for instance, <!--comment-- > and <!--a----b--> should be accepted with a warning, whereas <! --comment--> and <!--a---> should be rejected as they are invalid in both HTML and XHTML).  However, the current behaviour is overly permissive (rather than overly restrictive) and is therefore not a bug (since csscover *is not a validator*).
-	As mentioned above, csscover isn't finished yet, and in fact does nothing useful at present when applied to valid XHTML documents.
+	csscover isn't finished yet, and a bug in the cssi tree-matcher is causing the usage table to be incorrect.

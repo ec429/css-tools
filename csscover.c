@@ -104,6 +104,7 @@ int nwarnings=0,maxwarnings=10;
 bool wdtd=true;
 bool wquoteattr=true;
 bool wclose=true;
+bool wcase=true;
 
 int main(int argc, char *argv[])
 {
@@ -150,6 +151,7 @@ int main(int argc, char *argv[])
 			wquoteattr=true;
 			wclose=true;
 			wvermismatch=true;
+			wcase=true;
 		}
 		else if(strcmp(argt, "-Wno-all")==0)
 		{
@@ -158,6 +160,7 @@ int main(int argc, char *argv[])
 			wquoteattr=false;
 			wclose=false;
 			wvermismatch=false;
+			wcase=false;
 		}
 		else if(strcmp(argt, "-Wdupfile")==0)
 		{
@@ -198,6 +201,14 @@ int main(int argc, char *argv[])
 		else if(strcmp(argt, "-Wno-ver-mismatch")==0)
 		{
 			wvermismatch=false;
+		}
+		else if(strcmp(argt, "-Wcase")==0)
+		{
+			wcase=true;
+		}
+		else if(strcmp(argt, "-Wno-case")==0)
+		{
+			wcase=false;
 		}
 		else if((strncmp(argt, "-w=", 3)==0)||(strncmp(argt, "--max-warn=", 11)==0))
 		{
@@ -321,9 +332,9 @@ int main(int argc, char *argv[])
 				int j;
 				for(j=0;j<html[file][i].nattrs&&!isss;j++)
 				{
-					if(strcmp(html[file][i].attrs[j].name, "rel")==0)
+					if(strcasecmp(html[file][i].attrs[j].name, "rel")==0)
 					{
-						if(strcmp(html[file][i].attrs[j].value, "stylesheet")==0)
+						if(strcasecmp(html[file][i].attrs[j].value, "stylesheet")==0)
 						{
 							isss=true;
 						}
@@ -333,7 +344,7 @@ int main(int argc, char *argv[])
 				{
 					for(j=0;j<html[file][i].nattrs;j++)
 					{
-						if(strcmp(html[file][i].attrs[j].name, "href")==0)
+						if(strcasecmp(html[file][i].attrs[j].name, "href")==0)
 						{
 							cfiles++;
 							cssfiles=(char **)realloc(cssfiles, cfiles*sizeof(char *));
@@ -364,7 +375,15 @@ int main(int argc, char *argv[])
 	fprintf(output, "csscover: input files read\n");
 	if(daemonmode)
 		printf("READ*\n");
-		
+	
+	if(cfiles==0)
+	{
+		fprintf(output, "csscover: Error: no stylesheet links found in HTML\n");
+		if(daemonmode)
+			printf("ERR:ENOCSS\n");
+		return(0);
+	}
+	
 	int wp[2],rp[2],e;
 	int ww,rr;
 	if((e=pipe(wp)))
@@ -912,7 +931,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					{
 						if(*curr=='/')
 							closer=true;
-						if(wdtd && (dtds==0) && !no_dtd_w)
+						if(wdtd && (dtds==0) && !no_dtd_w && (nwarnings++ < maxwarnings))
 						{
 							fprintf(output, PARSEWARN"\tNo <!DOCTYPE> declared or not first element\n", PARSEWARG);
 							fprintf(output, PMKLINE);
@@ -967,8 +986,17 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 						int i;
 						for(i=0;i<ntags;i++)
 						{
-							if(strcmp(cstr, tags[i])==0)
+							if(strcasecmp(cstr, tags[i])==0)
+							{
+								if((strcmp(cstr, tags[i])!=0) && wcase && (nwarnings++ < maxwarnings))
+								{
+									fprintf(output, PARSEWARN"\tUpper-case element names in HTML\n", PARSEWARG);
+									fprintf(output, PMKLINE);
+									if(daemonmode)
+										printf(DPARSEWARN"upper-case element names in HTML\n", DPARSEWARG);
+								}
 								break;
+							}
 						}
 						if(i<ntags)
 						{
@@ -1175,6 +1203,13 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					}
 					else
 					{
+						if(isupper(*curr) && wcase && (nwarnings++ < maxwarnings))
+						{
+							fprintf(output, PARSEWARN"\tUpper-case attribute name in HTML\n", PARSEWARG);
+							fprintf(output, PMKLINE);
+							if(daemonmode)
+								printf(DPARSEWARN"upper-case attribute name in HTML\n", DPARSEWARG);
+						}
 						if(push(&cstr, &cstl, *curr))
 						{
 							fprintf(output, PARSERR"\tOut of memory\n", PARSARG);
