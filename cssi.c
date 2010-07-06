@@ -939,7 +939,7 @@ int parse_selector(selector * s, int sid)
 	while(*(curr=s->text+pos) || state) // assigns curr to the current position, then checks the char there is not '\0' - if it is, and state=0, then stop
 	{
 		if(trace)
-			fprintf(output, "%d\t%d\t%hhu\t'%c'\t%p,%p,%p\t%s\n", state, pos+1, *curr, *curr, chld, sblg, self, cstr);
+			fprintf(stderr, "%d\t%d\t%hhu\t'%c'\t%p,%p,%p\t%s\n", state, pos+1, *curr, *curr, chld, sblg, self, cstr);
 		switch(state)
 		{
 			case 0: // get an identifier
@@ -1054,7 +1054,7 @@ int parse_selector(selector * s, int sid)
 					sblg->nextrel=SBLG;
 					sblg=sblg->next=next;
 					sblg->next=NULL;
-					sblg->selfs=NULL;
+					self=sblg->selfs=NULL;
 					desc=false;
 					pos++;
 					igwhite=true; // ' + ' is like '+', not ' '.
@@ -1111,6 +1111,7 @@ int parse_selector(selector * s, int sid)
 						return(1);
 					}
 				}
+				//fprintf(stderr, "chld %p, sblg %p, self %p, sself %p\n", chld, sblg, self, sblg?sblg->selfs:NULL);
 				if(desc&&chld)
 				{
 					sel_elt * next=(sel_elt *)malloc(sizeof(sel_elt));
@@ -1121,12 +1122,16 @@ int parse_selector(selector * s, int sid)
 					sblg=chld->sibs=NULL;
 					self=NULL;
 				}
+				//fprintf(stderr, "chld %p, sblg %p, self %p, sself %p\n", chld, sblg, self, sblg?sblg->selfs:NULL);
 				if(!chld)
 				{
 					s->chain=chld=(sel_elt *)malloc(sizeof(sel_elt));
 					chld->prev=NULL;
 					chld->next=NULL;
+					sblg=chld->sibs=NULL;
+					self=NULL;
 				}
+				//fprintf(stderr, "chld %p, sblg %p, self %p, sself %p\n", chld, sblg, self, sblg?sblg->selfs:NULL);
 				if(!sblg)
 				{
 					sblg=chld->sibs=(sel_elt2 *)malloc(sizeof(sel_elt2));
@@ -1134,16 +1139,16 @@ int parse_selector(selector * s, int sid)
 					sblg->prev=NULL;
 					self=sblg->selfs=NULL;
 				}
+				//fprintf(stderr, "chld %p, sblg %p, self %p, sself %p\n", chld, sblg, self, sblg?sblg->selfs:NULL);
 				if(!self)
 				{
-					self=(sel_elt3 *)malloc(sizeof(sel_elt3));
-					sblg->selfs=self;
+					self=sblg->selfs=(sel_elt3 *)malloc(sizeof(sel_elt3));
 				}
 				else
 				{
-					sel_elt3 * next=(sel_elt3 *)malloc(sizeof(sel_elt3));
-					self=self->next=next;
+					self=self->next=(sel_elt3 *)malloc(sizeof(sel_elt3));
 				}
+				//fprintf(stderr, "chld %p, sblg %p, self %p, sself %p\n", chld, sblg, self, sblg?sblg->selfs:NULL);
 				self->type=type;
 				self->data=cstr;
 				self->next=NULL; // until (and if) we get one
@@ -1168,6 +1173,7 @@ int parse_selector(selector * s, int sid)
 		sblg=chld->sibs;
 		while(sblg && sblg->next) sblg=sblg->next;
 		chld->last=sblg;
+		//fprintf(stderr, "chld %p, last %p, self %p\n", chld, chld->last, chld->last->selfs);
 		chld=chld->next;
 	}
 	return(0);
