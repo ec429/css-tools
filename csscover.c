@@ -981,7 +981,7 @@ ht_el * htparse(char ** lines, int nlines, int * nels)
 					}
 				break;
 				case 3:
-					if(strchr(" >", *curr))
+					if(strchr(" \t\r\f\n>", *curr))
 					{
 						int i;
 						for(i=0;i<ntags;i++)
